@@ -60,7 +60,17 @@ Full detail in the workflow plan §2. Highlights:
 - **Label-free IDF on test S2/S3:** allowed (needed for France, which has no labels). Documented as transductive, not a leak.
 - **Model:** LightGBM (MIT license), not the old rule-based heuristics.
 
-## Stage 0: Data Foundation — ✅ COMPLETE (all 11 gates passed)
+## Foundation v2: ✅ COMPLETE 2026-09-26 (supersedes the v1 split and access; v1 kept read-only)
+
+A review of Stage 0 found errors, now fixed in v2 (built from commit f505e5f; all 31 gates passed; 29/29 tests pass):
+- **Stress flag:** v1 drew it from all splits (84,699 VALIDATION and 42,222 LOCKBOX flagged). v2 draws it **from FIT only** (US 248,831, India 173,510). The achieved ratios equal the test ratios, and the check is proven able to fail.
+- **Label exposure:** v1's `load_split()` exposed `n_total`, `is_singleton` and `bucket` for VALIDATION/LOCKBOX. The v2 split has only `s1_gid, s1_id, country, split, stress_hidden`. Counts moved behind `access.load_match_counts(split)`, which is gated like the labels.
+- **Scorer and lockbox modules expose scores only**, never raw labels. `leakscan` (run in tests) flags any production code that reads label files or requests VALIDATION/LOCKBOX data.
+- **Manifest:** `MANIFEST_v2.json` computes every number, records every gate, and lists corrected expectations. `access.py` hash-verifies every file it serves against it.
+- **Unchanged:** raw, bronze, gt_raw, gt_links, and **FIT/VALIDATION/LOCKBOX membership** (0 differences from v1).
+- **Corrected expectation:** S1 does have placeholder address components (exactly 8 train rows and 29 test rows). The assumed "0" was never measured.
+
+## Stage 0: Data Foundation v1 (historical; split/access superseded by v2 above)
 
 Built exactly per the Stage 0 spec. Summary:
 - Verified raw files against the **original zip** (not just Kaggle) — all 7 SHA-256 hashes match exactly.
