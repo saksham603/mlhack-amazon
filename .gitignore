@@ -1,0 +1,9 @@
+data/
+.venv/
+*.pyc
+__pycache__/
+.kaggle/
+*.json.bak
+kaggle.json
+credentials.json
+*.duckdb
