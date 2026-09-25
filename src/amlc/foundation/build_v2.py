@@ -57,6 +57,17 @@ PROFILE_CROSSCHECKS = [  # (dataset, src, country, column, earlier measurement),
 PROFILE_TOL_PP = 0.5
 NULL_COMPONENT_EXPECTED = {("train", 2): 6.850, ("train", 3): 6.632, ("test", 2): 5.532, ("test", 3): 5.447}
 NULL_COMPONENT_TOL_PP = 0.1
+# Corrected expectation (2026-09-26): the first v2 run asserted "S1 has 0 missing address
+# components", an assumption never measured. The data has 8 (train) and 29 (test) S1 rows with a
+# genuine placeholder component (N/A, None, or empty from ",,"). Exact counts are asserted now.
+S1_NULL_COMPONENT_ROWS = {("train", 1): 8, ("test", 1): 29}
+CORRECTED_EXPECTATIONS = [{
+    "check": "S1 missing address components",
+    "old_expectation": "0 rows (assumed, never measured)",
+    "new_expectation": "exactly 8 train S1 rows and 29 test S1 rows",
+    "evidence": "first v2 run measured 0.000363% train / 0.001674% test; rows inspected: placeholders "
+                "'N/A' (5), 'None' (4) and empty components from ',,' (28), mostly France test S1",
+}]
 
 GATES: list[dict] = []
 
@@ -179,13 +190,14 @@ def main() -> int:
          {"rows": req_df.height, "test_s1": sum(test_n1.values())})
 
     # ---- C3/C4: profile v2 with strict cross-checks and component-level missing addresses ----
-    rows, comp_tables = [], {}
+    rows, comp_tables, comp_rows = [], {}, {}
     for ds in ("train", "test"):
         for src in (1, 2, 3):
             base = profile_table(ds, src)
             df = pl.read_parquet(BRONZE / f"{ds}_source{src}.parquet", columns=["business_address", "country"])
             flags = df.with_columns(null_component_flags(df["business_address"]).alias("f"))
             comp_tables[(ds, src)] = 100 * flags["f"].sum() / flags.height
+            comp_rows[(ds, src)] = int(flags["f"].sum())
             by_c = {(c,): 100 * g["f"].sum() / g.height for (c,), g in flags.group_by("country")}
             for r in base:
                 r["addr_null_component_pct"] = by_c[(r["country"],)]
@@ -199,9 +211,10 @@ def main() -> int:
         v = comp_tables[(ds, src)]
         gate(f"C4-{ds}S{src}-null-component", f"component-level missing-address rate within {NULL_COMPONENT_TOL_PP}pp",
              abs(v - expected) <= NULL_COMPONENT_TOL_PP, {"measured": v, "stage1_spec": expected})
-    for ds in ("train", "test"):
-        v = comp_tables[(ds, 1)]
-        gate(f"C4-{ds}S1-null-component", "S1 has no missing address components", v == 0.0, {"measured": v})
+    for (ds, src), expected_rows in S1_NULL_COMPONENT_ROWS.items():
+        v = comp_rows[(ds, src)]
+        gate(f"C4-{ds}S1-null-component", f"S1 rows with a missing address component = exactly {expected_rows}",
+             v == expected_rows, {"measured_rows": v, "expected_rows": expected_rows})
 
     if not all_passed():
         print("\nPRE-WRITE GATES FAILED: nothing written.")
@@ -291,6 +304,7 @@ def main() -> int:
         },
         "stress_test": {"parameters": params, "notes": notes, "drawn_from": "FIT only"},
         "profile_tolerances": {"crosscheck_pp": PROFILE_TOL_PP, "null_component_pp": NULL_COMPONENT_TOL_PP},
+        "corrected_expectations": CORRECTED_EXPECTATIONS,
         "gates": GATES,
         "all_gates_passed": all_passed(),
     }

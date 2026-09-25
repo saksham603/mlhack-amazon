@@ -42,7 +42,7 @@ Full detail in the workflow plan §2. Highlights:
 
 ## Key facts about the data (all measured directly, not assumed)
 
-- train S1: 2,206,821 rows (US 1,323,633 / India 883,188). S1 is clean/canonical — no empty fields, no nulls, Title Case, no Indic script.
+- train S1: 2,206,821 rows (US 1,323,633 / India 883,188). S1 is clean/canonical: no empty fields, no null fields, Title Case, no Indic script. It does have a handful of placeholder address **components** (`N/A`, `None`, or empty from `,,`): exactly 8 train S1 rows and 29 test S1 rows (corrected 2026-09-26; the earlier "fully clean" claim was never measured).
 - train S2: 5,034,616 / S3: 5,285,603. All noise lives in S2/S3.
 - test S1: 1,732,544 (India 809,986 / US 663,106 / **France 259,452**). test S2: 4,887,273 / S3: 5,082,316.
 - **Ground truth is a strict partition:** all 7,638,365 links, 0 S2/S3 records linked to more than one S1. 5.58% of S1 are singletons (median 3 matches).
