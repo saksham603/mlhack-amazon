@@ -19,6 +19,7 @@ Kaggle workspace: `divyanshsingh0967/mlchallenge-2026` (private dataset), profil
 | **Project code (own git repo)** | `C:\Users\suremdra singh\amlc2026\` |
 | Full workflow plan (objectives, mistakes register, W0–W12 steps, guardrails, council review) | `C:\Users\suremdra singh\.claude\plans\amlc2026-workflow-plan.md` |
 | Stage 0 data-foundation spec (the exact prompt executed) | `C:\Users\suremdra singh\.claude\plans\amlc2026-stage0-data-foundation-prompt.md` |
+| **Stage 1 cleaning spec (written, NOT executed; D5–D7 await explicit confirmation)** | `C:\Users\suremdra singh\.claude\plans\amlc2026-stage1-cleaning-prompt.md`. Order is C1 text → C2 script/transliteration → C3 names → C4 addresses → C5 stats; transliteration must run before legal-form extraction. The Indic vocabulary is closed: the same 1,537 tokens appear in train and test. |
 | Old plan file (now corrupted on disk — contains only "c", do not use) | `expressive-orbiting-fiddle.md` — superseded, ignore |
 | Old Gemini-built pipeline (read-only historical record; **rule: never reopen it**, see below) | `C:\Users\suremdra singh\kaggle-review\` |
 | Original competition zip (verified source of truth) | `C:\Users\suremdra singh\Downloads\6ab10eb3b23ba_student_resource.zip` |
