@@ -1,0 +1,16 @@
+{
+  "step": "W0",
+  "computed": "2026-09-26 (overnight run)",
+  "baseline": "all-empty prediction on VALIDATION",
+  "n_scored": 441361,
+  "f05_macro": 0.05584770743223801,
+  "singleton_share": 0.05584770743223801,
+  "pred_empty_share": 1.0,
+  "pair_precision": null,
+  "pair_recall": 0.0,
+  "by_country": {
+    "India": {"f05": 0.05587762404039946, "n": 176636},
+    "US": {"f05": 0.055827745773916325, "n": 264725}
+  },
+  "note": "f05_macro == singleton_share exactly, as required: an empty prediction scores 1.0 only on a singleton. This is the floor any real model must beat (O2). Old-matcher baseline not available (no train-side prediction file from the old pipeline was found), so only this baseline exists for now."
+}
