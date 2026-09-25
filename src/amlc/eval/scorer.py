@@ -1,9 +1,20 @@
-"""Placeholder module: F9 tests need a real module at this exact dotted path
-to prove the per-split gate checks caller identity correctly. The real F_0.5
-scorer implementation belongs to a later stage (W0), not Stage 0.
+"""VALIDATION scorer. Public API: score() only. Raw VALIDATION labels never leave this module.
+
+The macro F_0.5 logic is built in W0; until then score() raises. The private loaders exist so the
+access gate can be exercised; code outside amlc.eval calling them is flagged by leakscan (R2).
 """
 from amlc.foundation import access
 
+__all__ = ["score"]
 
-def load_validation_labels():
+
+def _load_validation_labels():
     return access.load_labels("VALIDATION")
+
+
+def _load_validation_match_counts():
+    return access.load_match_counts("VALIDATION")
+
+
+def score(predictions):
+    raise NotImplementedError("W0 not built yet: score() must return metrics only, never raw labels.")
