@@ -123,8 +123,8 @@ def load_test_required() -> pl.DataFrame:
     return _read_verified(SPLITS / "test_s1_required.parquet", m["sha256"])
 
 
-def _split_ids(split: str) -> pl.Series:
-    return load_split().filter(pl.col("split") == split)["s1_id"]
+def _split_ids(split: str) -> pl.DataFrame:
+    return load_split().filter(pl.col("split") == split).select("s1_id")
 
 
 def load_labels(split: str) -> pl.DataFrame:
@@ -133,7 +133,7 @@ def load_labels(split: str) -> pl.DataFrame:
     _authorize(split, _caller_module(), "load_labels")
     expected = _manifest()["unchanged_artifacts"]["label_file_hashes"]["gt_links.parquet"]
     links = _read_verified(LABELS_V1 / "gt_links.parquet", expected)
-    return links.filter(pl.col("s1_id").is_in(_split_ids(split)))
+    return links.join(_split_ids(split), on="s1_id", how="semi")
 
 
 def load_match_counts(split: str) -> pl.DataFrame:
@@ -142,4 +142,4 @@ def load_match_counts(split: str) -> pl.DataFrame:
     _authorize(split, _caller_module(), "load_match_counts")
     m = _manifest()["new_artifacts"]["match_counts"]
     counts = _read_verified(LABELS_V2 / "s1_match_counts.parquet", m["sha256"])
-    return counts.filter(pl.col("s1_id").is_in(_split_ids(split)))
+    return counts.join(_split_ids(split), on="s1_id", how="semi")
