@@ -34,9 +34,14 @@ ACCENT_MARKS = (0x300, 0x36F)
 SPACE_BEFORE_COMMA = re.compile(r" +,")
 
 
+# Speed (2026-09-26, profiled): a set built from LATIN_RANGES replaces a per-character range scan, and
+# fold_latin skips its loop when nothing in the string can be folded. Both are exact by construction.
+_LATIN_CHARS = frozenset(chr(cp) for lo, hi in LATIN_RANGES for cp in range(lo, hi + 1))
+_FOLDABLE = re.compile("[̀-ͯ" + "".join(LIGATURES) + "]")
+
+
 def _is_latin(ch: str) -> bool:
-    cp = ord(ch)
-    return any(lo <= cp <= hi for lo, hi in LATIN_RANGES)
+    return ch in _LATIN_CHARS
 
 
 def _decode_utf8(m: re.Match) -> str:
@@ -78,8 +83,11 @@ def repair_counts(s: str) -> Counter:
 
 
 def fold_latin(s: str) -> str:
+    d = unicodedata.normalize("NFD", s)
+    if not _FOLDABLE.search(d):  # the loop below could only copy d unchanged
+        return unicodedata.normalize("NFC", d)
     out, base_is_latin = [], False
-    for ch in unicodedata.normalize("NFD", s):
+    for ch in d:
         if unicodedata.category(ch).startswith("M"):
             if base_is_latin and ACCENT_MARKS[0] <= ord(ch) <= ACCENT_MARKS[1]:
                 continue

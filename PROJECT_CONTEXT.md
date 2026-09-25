@@ -124,11 +124,19 @@ Local Claude 4-role council (Devil's Advocate, Simplicity Champion, Security Aud
 
 ## What's NOT done yet / explicitly NOT VERIFIED
 
-- Stage 1 (cleaning) — not started, waiting for "go".
+- Stage 1 (cleaning): C1 done (`interim/c1/v2`, commit e197d8c, 80/80 gates). The C1 speed-up is proven exact but not yet committed. C2–C6 not started.
 - Whether test's larger S2/S3-per-S1 ratio reflects more distractors or genuinely more true matches per S1 (assumed pessimistically = distractors).
 - Whether test has the same 5.58% singleton rate as train.
 - Whether France behaves like US/India (the pseudo-France + cross-country-transfer checks in W8 are our best proxy, not proof).
 
 ## Immediate next step
 
-Say **"go"** to start **Stage 1: cleaning** — the text-normalization pipeline (Stage 1–5 of the cleaning plan: nulls, Unicode/accent-folding, name normalization, address normalization, Indic script handling, word-frequency statistics), written from scratch per the isolation rule above, operating on the Stage 0 bronze Parquet tables.
+The full plan for what is left is in workflow plan §10:
+- the per-step protocol;
+- steps S0–S17, each with its likely mistake and the check that catches it;
+- the cut list if time runs short;
+- open items for the user.
+
+Guardrails G-P9 to G-P16 (Stage 1 prompt CG-19 to CG-26) were added 2026-09-26. They cover RAM budgeted before a run, one heavy job at a time, exact-only speed-ups, announced long jobs, no gate skipped under time pressure, declared join shapes, Kaggle environment parity, and resuming from published output only.
+
+Next: S0 (commit the speed-up), then S1 (W0 scorer). Each needs the user's go.

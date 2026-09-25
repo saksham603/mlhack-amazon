@@ -4,8 +4,11 @@ Plain Python loops over raw strings, versus text.py's Polars list expressions. W
 stripping is the Unicode White_Space property, the same character set Polars' str.strip_chars()
 strips (Rust char::is_whitespace), written out here instead of borrowed from either library.
 """
+import re
 import unicodedata
 from collections import Counter
+
+VISIBLE_ASCII = re.compile("[!-~]")
 
 WHITE_SPACE = "".join(map(chr, [
     *range(0x09, 0x0E), 0x20, 0x85, 0xA0, 0x1680, *range(0x2000, 0x200B),
@@ -32,6 +35,10 @@ def _char_survives(ch: str) -> bool:
 
 def part_is_emptied(part: str) -> bool:
     """True if a step-1-surviving part contains nothing C1 keeps (D-C1f)."""
+    # A visible ASCII character (! to ~) always survives: no rule removes it, the garbled-text rules
+    # consume only non-ASCII characters, and _char_survives() is True for each (checked by a test).
+    if VISIBLE_ASCII.search(part):
+        return False
     for m in LOST_MARKERS:
         part = part.replace(m, " ")
     i, chars = 0, []
