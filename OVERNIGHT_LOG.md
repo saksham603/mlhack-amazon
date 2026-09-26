@@ -267,3 +267,25 @@ tonight; no pip references; no council/ollama processes. Free RAM 9.63 GB. Time 
 the 09:15 cutoff -- stopping here rather than inventing new scope beyond T1-T8.
 Commit: (this entry's commit follows)
 SELF-CHECK 07:10: ok
+
+---
+
+# v1 Sprint, 2026-09-26 evening (amlc2026-v1-sprint-prompt.md, deadline corrected to 2026-09-27 23:59 IST)
+
+## 17:57 Sprint step 1: commit W2 batched code + dry-run JSONs
+Action: Committed src/amlc/features/w2.py (pair_features + write_features_batched), w2_dryrun.py,
+src/amlc/blocking/oracle_ceiling.py, gen_candidates_scale.py, their tests, and the small dry-run
+JSON reports (data/ is normally gitignored; force-added just these summary JSONs, not the large
+parquet outputs).
+Gates: 6/6 W2 tests pass (incl. batching correctness test with a fake loader); pytest --collect-only
+192 tests collect cleanly project-wide.
+Measured: blocking-only oracle F0.5 ceiling India 0.9104 (recall 79.15%), US 0.9783 (recall 94.01%).
+W2 batched RAM: 1% US slice 3.94GB peak (1 batch); 5% US slice, 6.35M candidates, 5 batches, 4.33GB
+peak -- directly measured, not extrapolated; confirms peak RAM tracks batch_size, not total scale.
+Found in passing: candidate GENERATION (blocking) also needs S1-side batching -- 10% US fraction
+hit v2.score's join-row budget guard (MemoryError, caught safely, no crash); 5% succeeded but
+peaked at 11.8GB, too close to the 12GB ceiling. This is what D-S1's fused batched pipeline (step 2)
+fixes.
+Commit: 6af6534
+Next: step 2, fused batched pipeline (D-S1..D-S3)
+SELF-CHECK 17:57: ok
