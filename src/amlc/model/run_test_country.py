@@ -43,6 +43,33 @@ def load_test_s23(country: str) -> pl.DataFrame:
     return s23.select("s23_gid", *fused.S1_COLS)
 
 
+def score_batches(cand_dir, feat_dir, scored_dir, booster) -> int:
+    """Scores one candidate/feature batch pair at a time (peak RAM bounded by one batch, not by the
+    whole country) and writes scored_<i>.parquet. Resumable: an existing scored batch is skipped.
+    Raises if a batch's candidate and feature files disagree -- the symptom of the concurrent-writer
+    corruption found 2026-09-26 21:10 -- instead of letting an inner join drop rows silently."""
+    scored_dir.mkdir(parents=True, exist_ok=True)
+    total = 0
+    for cand_path in sorted(cand_dir.glob("candidates_*.parquet")):
+        idx = cand_path.stem.split("_")[1]
+        out_path = scored_dir / f"scored_{idx}.parquet"
+        if out_path.exists():
+            total += pl.scan_parquet(out_path).select(pl.len()).collect().item()
+            continue
+        cand = pl.read_parquet(cand_path)
+        feat = pl.read_parquet(feat_dir / f"features_{idx}.parquet")
+        if cand.height != feat.height:
+            raise RuntimeError(f"batch {idx}: {cand.height} candidates vs {feat.height} feature rows. STOP.")
+        merged = cand.join(feat, on=["s1_gid", "s23_gid"], how="inner", validate="1:1")
+        if merged.height != cand.height:
+            raise RuntimeError(f"batch {idx}: join kept {merged.height} of {cand.height} rows. STOP.")
+        probs = T.predict_proba(booster, merged)
+        (merged.select("s1_gid", "s23_gid", "blocking_score", "blocking_rank")
+         .with_columns(pl.Series("prob", probs)).write_parquet(out_path))
+        total += merged.height
+    return total
+
+
 def main() -> int:
     import lightgbm as lgb
 
@@ -66,19 +93,15 @@ def main() -> int:
     rep = fused.run_country_with_index(s1, s23, k23, rare, budget_rows, batch_size, cand_dir, feat_dir)
     _log(log_path, f"candidates+features done: {rep['n_batches']} batches, {rep['n_candidates_total']:,} candidates")
 
+    del s1, s23, k23, rare
     booster = lgb.Booster(model_file=str(MODEL_PATH))
-    cand = pl.concat([pl.read_parquet(f) for f in sorted(cand_dir.glob("candidates_*.parquet"))], how="vertical")
-    feat = pl.concat([pl.read_parquet(f) for f in sorted(feat_dir.glob("features_*.parquet"))], how="vertical")
-    merged = cand.join(feat, on=["s1_gid", "s23_gid"], how="inner", validate="1:1")
-    probs = T.predict_proba(booster, merged)
-    scored = merged.select("s1_gid", "s23_gid", "blocking_score", "blocking_rank").with_columns(pl.Series("prob", probs))
-    scored_path = TEST_OUT / f"scored_{country}.parquet"
-    scored_path.parent.mkdir(parents=True, exist_ok=True)
-    scored.write_parquet(scored_path)
-    _log(log_path, f"scored {scored.height:,} candidates, written to {scored_path}")
+    scored_dir = TEST_OUT / "scored" / country
+    n_scored = score_batches(cand_dir, feat_dir, scored_dir, booster)
+    _log(log_path, f"scored {n_scored:,} candidates in batches, written to {scored_dir}")
 
     summary = {"country": country, "n_s1": rep["n_s1"], "n_candidates": rep["n_candidates_total"],
-               "n_batches": rep["n_batches"], "batch_size": batch_size, "peak_ram_mb": peak_ram_mb()}
+               "n_scored": n_scored, "n_batches": rep["n_batches"], "batch_size": batch_size,
+               "peak_ram_mb": peak_ram_mb()}
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / f"test_{country}.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     _log(log_path, "country complete")

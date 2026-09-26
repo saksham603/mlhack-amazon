@@ -17,16 +17,57 @@ OUTPUT_DIR = access.ROOT / "output"
 COUNTRIES = ("India", "US", "France")
 
 
-def load_all_scored() -> pl.DataFrame:
-    return pl.concat([pl.read_parquet(TEST_OUT / f"scored_{c}.parquet") for c in COUNTRIES], how="vertical")
+def load_scored(country: str, columns: list[str]) -> pl.DataFrame:
+    """Batched layout (scored/<country>/scored_*.parquet) if present, else the older single file."""
+    batch_dir = TEST_OUT / "scored" / country
+    if batch_dir.is_dir() and any(batch_dir.glob("scored_*.parquet")):
+        return pl.concat([pl.read_parquet(f, columns=columns) for f in sorted(batch_dir.glob("scored_*.parquet"))],
+                         how="vertical")
+    return pl.read_parquet(TEST_OUT / f"scored_{country}.parquet", columns=columns)
 
 
-def load_all_candidates() -> pl.DataFrame:
-    parts = []
-    for c in COUNTRIES:
-        cdir = TEST_OUT / "candidates" / c
-        parts.append(pl.concat([pl.read_parquet(f) for f in sorted(cdir.glob("candidates_*.parquet"))], how="vertical"))
-    return pl.concat(parts, how="vertical").select("s1_gid", "s23_gid")
+def load_predicted(threshold: float) -> pl.DataFrame:
+    """Only rows at/above threshold (a few million), filtered per country before concatenating, so
+    the full ~230M-row scored set is never in memory at once. G-M3 is applied by the caller."""
+    return pl.concat([load_scored(c, ["s1_gid", "s23_gid", "prob"]).filter(pl.col("prob") >= threshold)
+                      for c in COUNTRIES], how="vertical")
+
+
+def group_ids(links: pl.DataFrame, s1_map: pl.DataFrame, s23_map: pl.DataFrame) -> pl.DataFrame:
+    """links: (s1_gid, s23_gid) -> (s1_id, ids) with sorted, de-duplicated, comma-joined S2/S3 ids."""
+    return (links.join(s1_map, on="s1_gid", how="inner").join(s23_map, on="s23_gid", how="inner")
+            .group_by("s1_id").agg(pl.col("s23_id").unique().sort().str.join(",").alias("ids")))
+
+
+def write_candidate_tsv_streaming(out_path, s1_map, s23_map, all_s1_ids: set[str], internal_dir) -> dict:
+    """Streams candidate_pairs.tsv one candidate batch at a time (each S1's candidates live entirely
+    inside one batch, since batches partition S1s), then appends an empty row for every test S1
+    blocking found nothing for. Also writes the internal parquet (s1_id, candidate_id, rank, score)
+    per batch for tomorrow's budget sweep (sprint sec5 / D-S3)."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    written: set[str] = set()
+    n_pairs = 0
+    with open(out_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("source1_entity_id\tcandidate_entity_ids\n")
+        for c in COUNTRIES:
+            idir = internal_dir / c
+            idir.mkdir(parents=True, exist_ok=True)
+            for p in sorted((TEST_OUT / "candidates" / c).glob("candidates_*.parquet")):
+                batch = pl.read_parquet(p)
+                n_pairs += batch.height
+                (batch.join(s1_map, on="s1_gid", how="inner").join(s23_map, on="s23_gid", how="inner")
+                 .select("s1_id", pl.col("s23_id").alias("candidate_id"),
+                         pl.col("blocking_rank").alias("rank"), pl.col("blocking_score").alias("score"))
+                 .write_parquet(idir / f"{p.stem}.parquet"))
+                rows = group_ids(batch.select("s1_gid", "s23_gid"), s1_map, s23_map)
+                dup = written.intersection(rows["s1_id"].to_list())
+                if dup:
+                    raise RuntimeError(f"S1 ids appear in more than one candidate batch, e.g. {list(dup)[:3]}. STOP.")
+                written.update(rows["s1_id"].to_list())
+                f.write("".join(f"{a}\t{b}\n" for a, b in rows.iter_rows()))
+        empty = all_s1_ids - written
+        f.write("".join(f"{a}\t\n" for a in sorted(empty)))
+    return {"n_candidate_pairs": n_pairs, "s1_with_candidates": len(written), "s1_without_candidates": len(empty)}
 
 
 def build_id_maps() -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -56,19 +97,18 @@ def assemble(threshold: float) -> dict:
     s1_map, s23_map = build_id_maps()
     all_s1_ids = s1_map.select("s1_id")
 
-    candidates = load_all_candidates()
-    cand_tsv = links_to_tsv(candidates, s1_map, s23_map, all_s1_ids, "candidate_id")
-    write_tsv(cand_tsv, "candidate_id", "candidate_entity_ids", OUTPUT_DIR / "candidate_pairs.tsv")
+    cand_rep = write_candidate_tsv_streaming(OUTPUT_DIR / "candidate_pairs.tsv", s1_map, s23_map,
+                                             set(all_s1_ids["s1_id"].to_list()),
+                                             access.DATA / "_v1" / "test_candidates")
 
-    scored = load_all_scored()
-    predictions = predictions_at_threshold(scored.select("s1_gid", "s23_gid", "prob"), threshold)
+    predictions = predictions_at_threshold(load_predicted(threshold), threshold)
     match_tsv = links_to_tsv(predictions, s1_map, s23_map, all_s1_ids, "matched_id")
     write_tsv(match_tsv, "matched_id", "matched_entity_ids", OUTPUT_DIR / "matching_results.tsv")
 
     return {
-        "threshold": threshold, "n_test_s1": all_s1_ids.height,
-        "n_candidates": candidates.height, "n_predictions": predictions.height,
-        "candidate_rows_written": cand_tsv.height, "match_rows_written": match_tsv.height,
+        "threshold": threshold, "n_test_s1": all_s1_ids.height, **cand_rep,
+        "n_predictions": predictions.height, "match_rows_written": match_tsv.height,
+        "s1_with_predictions": predictions["s1_gid"].n_unique(),
     }
 
 
