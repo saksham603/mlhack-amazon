@@ -559,3 +559,23 @@ while reading the 2.69 GB candidate_pairs.tsv whole. This is an unexpected Memor
 STOP. No process left running, free RAM back to ~8970 MB. Outputs NOT yet validated, official
 validator NOT yet run. Stopped for user decision; proposed fix: stream-validate candidate_pairs.tsv
 line by line (stdlib, bounded RAM) instead of loading it as one frame.
+
+## 23:02 - k-sweep on VALIDATION half B (lgbm_v1, threshold 0.64) -> rule picks k=150, STOP
+
+`amlc.model.k_sweep` (44 s, read-only, probs computed once, restricted by blocking_rank <= k):
+
+| k | VAL-B F0.5 | India | US | cand/S1 |
+|---|---|---|---|---|
+| 5 | 0.7277 | 0.6115 | 0.8452 | 5.0 |
+| 10 | 0.7514 | 0.6461 | 0.8579 | 10.0 |
+| 20 | 0.7680 | 0.6719 | 0.8652 | 19.9 |
+| 30 | 0.7780 | 0.6894 | 0.8676 | 29.8 |
+| 50 | 0.7939 | 0.7193 | 0.8694 | 49.2 |
+| 150 | 0.8259 | 0.7767 | 0.8757 | 120.5 |
+
+k=150 reproduces step 4's 0.8259 exactly (sanity check passes). Rule "smallest k within 0.002 of
+k=150" selects k=150: no smaller k qualifies (k=50 is -0.032, driven by India). But the official
+validator keeps a Python set of every candidate id per S1 (validate_submission.py ~131-154):
+estimated ~25+ GB at k=150 (206.7M str objects + 1.73M sets), so it cannot pass on this 16 GB
+machine. The rule and the "valid submission tonight" goal conflict -> stopped for user decision.
+Rough validator RAM estimates: k=20 ~4-5 GB, k=30 ~5-6 GB, k=50 ~9 GB (risky).
