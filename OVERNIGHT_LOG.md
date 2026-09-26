@@ -424,3 +424,13 @@ step4_model_report.json (full threshold curve + by_country/by_bucket breakdown).
 Commit: (follows this entry)
 Next: step 5, full TEST run (India, US, France), one country per process, resumable.
 SELF-CHECK 19:21: ok
+
+## 19:38 Sprint step 5: France TEST run complete (first-ever run on France data)
+Action: run_test_country France. 19:21:20-19:37:41 (~16.4min, faster than the ~27min estimate).
+259,452 test S1 (all of them, no sampling), 1,434,993 S2/S3 pool, 87 batches, 33,554,286 candidates
+(~129.3/S1, near the 150 budget as expected), scored with lgbm_v1.txt. Peak RAM 9,406.0 MB -- within
+budget. No errors on this never-before-touched country's data -- key-building/feature code held up.
+Launched US (background bkiob7oag) immediately after.
+Commit: (data outputs only; small JSON summary at data/_dryrun_w1/test_France.json)
+Next: US, then India (largest, ~810k S1) -- then step 6 (assemble + validate output files).
+SELF-CHECK 19:38: ok
