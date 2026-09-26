@@ -257,3 +257,13 @@ grid, adding the char-3gram pass, or any other change aimed at raising recall. T
 a measurement, not treated as a problem to silently fix.
 Report: data/_dryrun_w1/w1_dryrun_report.json (full per-country, per-cap, per-k breakdown).
 Runtime: 234.9s total, peak RAM 10,092.7 MB (see L13 above).
+
+## 07:10 T8 complete
+Action: Wrote MORNING_REPORT.md per the T8 spec (task status, every gate, commits, runtimes/RAM/
+free RAM, all lessons, STOP flags, decisions waiting for the user, exact 10:00 commands). Self-check
+(§8) clean: only MORNING_REPORT.md unstaged; no diffs under foundation/eval; the two "forbidden
+pattern" hits are pre-existing committed C1 code (its own sanctioned dry-run cleanup), not new
+tonight; no pip references; no council/ollama processes. Free RAM 9.63 GB. Time 07:01, well before
+the 09:15 cutoff -- stopping here rather than inventing new scope beyond T1-T8.
+Commit: (this entry's commit follows)
+SELF-CHECK 07:10: ok
