@@ -610,3 +610,33 @@ original 50k-per-country v1 sample, this is ready for tomorrow's bigger-training
 
 Tonight's overnight scope (build_fit_extra for India + US) is complete. Stopping here per
 instruction to wait for tomorrow's plan message.
+
+## 02:26 - DAY 2 START (user GO 01:37; user delegated all decisions to me at ~02:15, laptop only)
+Plan: C:\Users\suremdra singh\.claude\plans\amlc2026-day2-master-prompt.md (laptop only: no Kaggle,
+no AWS, no neural model). This session executes it directly (no separate worker chat).
+Phase A1 done in code: src/amlc/features/norm_v2.py (cleanup v2; anyascii for leftover Indic tokens,
+titles / web / legal / stop words, spelled-out legal forms "s a s" -> sas, look-alike skeleton,
+hand-typed US + India state tables, street-word map with France overrides) + 4 unit tests (pass).
+Native-script state map learned from FIT pairs only: 16 states, each >= 98.9% consistent
+(e.g. Maharashtra 107,606 / 107,840). Bug caught in smoke test and fixed before the full run:
+component regex dropped Indic vowel signs (\p{M}).
+Records build running (data/_v2/records, one source at a time): train S1 region found 99.2%,
+train S2 95.5%.
+Phase A2 code: src/amlc/features/w3.py (+46 features: rapidfuzz ratio/partial/token_sort/token_set,
+Jaro-Winkler on no-space and skeleton names, initials/acronym/containment, legal same/conflict,
+state same/conflict/missing, house number and ZIP same/conflict/missing/one-edit, address
+token_set/sort, street, per-pool name-share ambiguity, per-S1 context). Smoke test on 3,000 FIT India
+S1 (253k pairs, 77k pairs/s, 0 nulls): positives vs negatives mean a_tset 94.4 vs 38.4, reg_eq
+0.94 vs 0.20, reg_conflict 0.016 vs 0.767; 20.9% of positives have name_jaccard < 1 but JW >= 0.9.
+SELF-CHECK 02:26: ok
+
+## 02:45 - PHASE A first model: VAL-B F0.5 0.9121 (v1 was 0.8259 on the same k=150 candidates)
+lgbm_v2 (56 features: 9 v1 + 47 v3), trained on the v1 FIT sample only (50k S1/country, easy negatives
+subsampled 20% with weight 5), lr 0.1, early stopping on a 10% S1 holdout. Threshold 0.68 (VAL-A).
+VAL-B: k150 0.9121 (India 0.8744, US 0.9501); k50 0.8700; k30 0.8499.
+Records build: 22.2M records in 670 s, exit 0 (test S1 region found 84.5%: France has no state table
+by design; French S1 ends in regions, S2/S3 often in departements -> self-training map planned).
+Blocking-miss measurement (FIT v1 sample, v1 k=150 misses): India 35,514 missed, 47% identical cleaned
+name, 92% address token_set >= 80; US 10,566 missed, 27% / 79%. -> blocking v3 keys (name x address
+token, region|name) written: src/amlc/blocking/v3.py, eval in progress.
+User asleep until ~20:00; uploads are the user's. SELF-CHECK 02:45: ok
