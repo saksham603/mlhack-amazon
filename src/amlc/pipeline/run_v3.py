@@ -27,6 +27,7 @@ K1, K3 = 30, 20
 V1 = access.DATA / "_v1"
 OUT = access.DATA / "_v3"
 MODEL_PATH = access.ROOT / "models" / "lgbm_v3.txt"
+TEST_SCORED = OUT / "test_feats_scored"
 OUTPUT = access.ROOT / "output"
 REC = access.DATA / "_v2" / "records"
 BLOCK_FEATURES = ["v1_score", "v1_rank", "v3_score", "v3_rank"]
@@ -89,7 +90,7 @@ def build(dataset: str, country: str, s1_gids: pl.Series, v1c: pl.DataFrame, out
         x = x.with_columns(pl.lit(country).alias("country"))
         if booster is not None:
             prob = booster.predict(to_x(x))
-            x = x.select("s1_gid", "s23_gid", "country", "v1_rank", "v3_rank").with_columns(pl.Series("prob", prob))
+            x = x.with_columns(pl.Series("prob", prob))  # keep features: later model-only changes just rescore
         x.write_parquet(dst)
         n_rows += x.height
     log(f"{dataset}/{country}: {r1s.height:,} S1, {n_rows:,} new rows ({time.time() - t0:.0f}s)")
@@ -161,11 +162,11 @@ def run_test() -> None:
     for c in sorted(p.name for p in (V1 / "test" / "candidates").iterdir() if p.is_dir()):
         v1c = v1_top(sorted((V1 / "test" / "candidates" / c).glob("*.parquet")))
         s1 = pl.read_parquet(REC / "test_s1.parquet", columns=["gid", "country"]).filter(pl.col("country") == c)["gid"]
-        build("test", c, s1, v1c, OUT / "test_scored", booster=booster)
+        build("test", c, s1, v1c, TEST_SCORED, booster=booster)
 
 
 def assemble(name: str, threshold: float) -> dict:
-    files = sorted((OUT / "test_scored").glob("*.parquet"))
+    files = sorted(TEST_SCORED.glob("*.parquet"))
     pred = predictions_at_threshold(pl.concat([pl.scan_parquet(f).filter(pl.col("prob") >= threshold)
                                                .select("s1_gid", "s23_gid", "prob").collect() for f in files]), threshold)
     s1_map, s23_map = build_id_maps()
