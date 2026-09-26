@@ -1,0 +1,10 @@
+{
+  "country": "US",
+  "n_s1": 250000,
+  "batch_size": 3000,
+  "n_batches": 84,
+  "n_candidates": 34319538,
+  "n_labeled_rows": 34319538,
+  "n_positive": 811400,
+  "peak_ram_mb": 9790.4
+}

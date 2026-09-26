@@ -596,3 +596,17 @@ Next: FIT data expansion (250K more S1 per country), data only, no training.
 4,133,346 S2/S3 pool, 84 batches, 25,884,391 candidates, 685,457 positive labels, peak RSS 7.18GB
 (well under the 10.5GB ceiling). Runtime 23:09-23:35 (~25.5 min). No lingering processes after
 completion. Data only, per instruction -- no training run. Starting US extra FIT build next.
+
+## 00:14 - overnight: extra FIT data built for US (250K S1), overnight scope complete
+
+`build_fit_extra.py US 3000`: 250,000 extra FIT S1 (0 overlap with v1 sample), 6,186,873 S2/S3
+pool, 84 batches, 34,319,538 candidates, 811,400 positive labels, peak RSS 9.79GB (within the
+10.5GB ceiling). Runtime 23:35-00:14 (~38.7 min, larger pool than India). No lingering processes.
+Data only per instruction -- no training run.
+
+Extra FIT data now on disk for both countries (data/_v1/training_extra/labeled/{India,US}/):
+India 25,884,391 rows / 685,457 positive; US 34,319,538 rows / 811,400 positive. Combined with the
+original 50k-per-country v1 sample, this is ready for tomorrow's bigger-training-set retrain.
+
+Tonight's overnight scope (build_fit_extra for India + US) is complete. Stopping here per
+instruction to wait for tomorrow's plan message.
