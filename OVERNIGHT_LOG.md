@@ -473,3 +473,24 @@ check would close this gap -- not implemented tonight (time), flagged as a real 
 Commit: (log only; the repair run is in progress, background bg5nii4qy)
 Next: wait for the repaired US run, verify counts match exactly this time, then India, then step 6.
 SELF-CHECK 21:10: ok
+
+## 21:25 Parallel work while US repairs: analysis + two RAM fixes for India/step 6
+User asked (21:12) to keep the pipeline running and work on improvements in parallel; answered
+that v1 is still worth submitting (only way to measure France/test, validates format end to end,
+1 of 5 daily slots) and that only ONE heavy pipeline job can run at a time on this 16GB machine.
+1. Blocking-miss analysis (dd6c145), FIT 50k/country sample: India recall 79.5%, US 93.9%. 83% of
+   India's misses SHARE a name token (lost to rarity cap / rank), only 1.6% of India's true links
+   are char-3gram targets. CORRECTION of my earlier claim to the user that char-3gram is the biggest
+   lever -- the measured lever is ranking inside blocking. Told the user explicitly.
+2. model_miss_analysis.py written + tested (7277412), not run yet: needs ~2-3GB, will run in the gap
+   between US and India. Adds per-S1 context features. Also fixed train.py's early-stopping holdout
+   (unordered unique() -> not reproducible); does not affect the saved v1 model.
+3. Found before running India (3bb5301): (a) run_test_country scored a whole country in one
+   in-memory concat -- US 88.8M rows peaked 9.87GB, India ~110M rows would likely breach 10.5GB.
+   Now scores batch by batch, resumable, and raises on any candidate/feature row-count mismatch.
+   (b) assemble_output would have mapped all ~230M candidate pairs to string ids at once (~10GB+).
+   Now streams candidate_pairs.tsv per batch and loads only threshold-passing predictions.
+   215/215 tests pass.
+Next: US repair finishes (old code, single-file scoring) -> full per-batch verification ->
+model-miss analysis -> India (new batched code) -> step 6.
+SELF-CHECK 21:25: ok
