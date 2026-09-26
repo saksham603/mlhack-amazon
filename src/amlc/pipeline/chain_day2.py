@@ -103,10 +103,39 @@ def run(name: str, argv: list) -> int:
         return subprocess.run([PY, "-u", *argv], cwd=ROOT, env=env, stdout=fh, stderr=subprocess.STDOUT).returncode
 
 
+def other_pipeline_pids() -> list:
+    """PIDs of python processes running an amlc module other than this chain driver."""
+    ps = ("Get-CimInstance Win32_Process -Filter \"name='python.exe'\" | "
+          "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=60).stdout.strip()
+    except Exception:
+        return [-1]  # unknown -> treat as busy
+    if not out:
+        return []
+    rows = json.loads(out)
+    rows = rows if isinstance(rows, list) else [rows]
+    return [r["ProcessId"] for r in rows
+            if "amlc." in (r.get("CommandLine") or "") and "chain_day2" not in (r.get("CommandLine") or "")]
+
+
+def wait_for_idle() -> None:
+    """Never run alongside another pipeline job (two jobs at once crashed the laptop twice)."""
+    clean = 0
+    while clean < 2:
+        pids = other_pipeline_pids()
+        clean = clean + 1 if not pids else 0
+        if pids:
+            print(now(), f"waiting: other pipeline processes running {pids}", flush=True)
+            status(state="waiting", waiting_for=pids)
+        time.sleep(60 if pids else 30)
+
+
 def main() -> int:
     dry = "--dry-run" in sys.argv
     CHAIN.mkdir(parents=True, exist_ok=True)
     if not dry:
+        wait_for_idle()
         status(state="running", pid=os.getpid(), started=now())
     for name, argv, dirs, done_check in STEPS:
         marker = CHAIN / f"{name}.done"
