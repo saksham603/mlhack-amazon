@@ -1,0 +1,18 @@
+{
+  "tag": "fused_US_frac0.05_bs3000",
+  "country": "US",
+  "dataset": "train",
+  "frac": 0.05,
+  "batch_size": 3000,
+  "n_s1": 46327,
+  "n_batches": 16,
+  "n_candidates_total": 6354624,
+  "candidates_per_s1": 137.16890798022752,
+  "load_s_s": 8.6,
+  "run_s": 1434.8,
+  "total_s": 1443.4,
+  "s1_per_sec": 32.28854306654654,
+  "peak_ram_mb": 9502.3,
+  "ram_ceiling_mb": 12288,
+  "within_ceiling": true
+}

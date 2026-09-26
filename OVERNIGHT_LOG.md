@@ -4,6 +4,53 @@ Append-only. Never edit an earlier entry.
 
 ---
 
+## STOP 18:23 -- sprint §7.2: step 5 runtime estimate > 3h (v1 sprint prompt)
+
+Reason: the measured 5% US dry run gives a full-test-run time estimate around 3.5h, over the
+sprint's 3h ceiling for step 5 (full India+US+France test run). Per §3: "If step 2's measured
+estimate says step 5 alone takes more than 3 hours, STOP and report. Do not start a run that
+cannot finish." Stopping here rather than launching step 5.
+
+Evidence (data/_dryrun_w1/pipeline_fused_US_frac0.05_bs3000.json, this run's own report):
+- Measured: batch_size=3000, n_s1=46,327 (5% of US FIT S1), n_batches=16, n_candidates_total=
+  6,354,624 (137.17/S1, matches the earlier unbatched 5% measurement exactly -- same candidates,
+  batching didn't change WHAT was produced, only how much RAM it took).
+- peak_ram_mb=9,502.3 -- within the D-S2 <=10.5GB target (vs. 11.8GB unbatched at the same 5%
+  scale). Batching itself is validated and safe to use.
+- run_s=1,434.8s total. From file mtimes during the run (candidates_00000..00011 written between
+  18:19 and 18:22), the per-batch phase ran at roughly 15s/3,000-S1 batch (~193 S1/sec); the
+  remainder (~1,195s, ~20min) is the one-time per-country S2/S3 key-index build (k23 + rare table),
+  paid once regardless of how many S1 batches follow.
+
+Full-test-run estimate (fixed ~1,200s/country pool-build + measured ~0.00518s/S1 batch rate,
+applied to the official test S1 counts from sprint §0.3):
+| Country | Test S1 | Estimate |
+|---|---:|---:|
+| US | 663,106 | ~77 min |
+| India | 809,986 | ~90 min |
+| France | 259,452 | ~42 min (new pool, first build) |
+| **Total** | 1,732,544 | **~3h 30min** |
+
+This is a lower-bound-leaning estimate, not a safe upper bound: the rate above was measured
+against the TRAIN S2/S3 pool for US only; the TEST S2/S3 pools are a different, and for at least
+France, entirely new, pool per country, likely larger overall (test S2 alone adds 703,378 France
+rows on top of India/US), so the per-country fixed key-build cost and per-batch throughput could
+both be worse than this proxy assumes. Treating ~3.5h as a floor, not a ceiling.
+
+Not done (blocked on this STOP, needs the user): steps 3-6 (training set, VAL tuning, full test
+run, output files). Step 2's code (fused pipeline) is committed and validated; nothing further was
+started pending this decision.
+Options I see, not decided: (a) proceed anyway and accept a longer runtime than 3h, since the
+sprint's V1_REPORT deadline is 00:00 but the organizer deadline is 23:59 tomorrow -- there is slack;
+(b) speed up the country pool-build step (e.g. profile which of tok/pair/nospace/house/zip keys
+dominates the ~20min build and drop/simplify the slowest for v1); (c) run the three countries as
+three separate long-running background jobs overlapping with other work, accepting ~1.5-2h wall
+time if run one-at-a-time (RAM discipline) or less if any could safely overlap.
+Commit: (log entry only, no code changes this stop)
+SELF-CHECK 18:23: ok
+
+---
+
 ## 04:57 START
 Read in full: master prompt / workflow plan / Stage 1 prompt: yes / yes / yes
 State matches §2: yes
