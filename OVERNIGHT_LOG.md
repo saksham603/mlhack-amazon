@@ -530,3 +530,19 @@ Model-miss analysis (FIT holdout s1_gid % 10 == 0, 10,016 S1, never trained on),
 Ranked model levers for tomorrow: richer address features (city/state/street/number tokens),
 IDF-weighted name similarity, more FIT training data (100k of ~1.5M S1 used), context features.
 SELF-CHECK 21:58: ok
+
+## 22:47 - India TEST run complete + verified, step 5 fully done
+
+India full TEST run (`run_test_country.py India 3000`) completed cleanly, no session interruption this time:
+- 21:48:54 start, 21:49:04 loaded 809,986 test S1 / 4,717,565 test S2+S3 pool
+- 22:05:50 index built (RSS 8890.8 MB)
+- 22:43:22 candidates+features done: 270 batches, 84,319,233 candidates
+- 22:45:38 scored 84,319,233 candidates, country complete (peak RSS 8890.8 MB, within the 10.5GB ceiling)
+
+Ran the standalone per-batch integrity check (candidate vs feature vs scored row-level join,
+not just row counts) across all 270 batches, same lesson as the two US corruption incidents:
+**0 bad batches**, all three files agree exactly on every (s1_gid, s23_gid) pair, all totals match
+(84,319,233 candidates == 84,319,233 scored). No lingering python processes after completion.
+
+Step 5 (full TEST run: India, US, France) is now complete and verified for all three countries.
+Moving to step 6: assemble output/candidate_pairs.tsv + output/matching_results.tsv.
