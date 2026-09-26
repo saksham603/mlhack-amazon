@@ -43,6 +43,12 @@ def load_test_s23(country: str) -> pl.DataFrame:
     return s23.select("s23_gid", *fused.S1_COLS)
 
 
+def all_batches_present(cand_dir, feat_dir, n_batches: int) -> bool:
+    """True if every expected candidate AND feature batch file 0..n_batches-1 exists."""
+    return all((cand_dir / f"candidates_{i:05d}.parquet").exists() and
+               (feat_dir / f"features_{i:05d}.parquet").exists() for i in range(n_batches))
+
+
 def score_batches(cand_dir, feat_dir, scored_dir, booster) -> int:
     """Scores one candidate/feature batch pair at a time (peak RAM bounded by one batch, not by the
     whole country) and writes scored_<i>.parquet. Resumable: an existing scored batch is skipped.
@@ -82,18 +88,26 @@ def main() -> int:
     _log(log_path, f"start TEST {country}, batch_size={batch_size}, free RAM {free_ram_mb()} MB")
 
     s1 = load_test_s1(country)
-    s23 = load_test_s23(country)
-    _log(log_path, f"loaded: {s1.height:,} test S1, {s23.height:,} test S2/S3 pool")
-
-    k23, rare = fused.build_country_index(s23)
-    _log(log_path, "S2/S3 index built")
-
     cand_dir = TEST_OUT / "candidates" / country
     feat_dir = TEST_OUT / "features" / country
-    rep = fused.run_country_with_index(s1, s23, k23, rare, budget_rows, batch_size, cand_dir, feat_dir)
-    _log(log_path, f"candidates+features done: {rep['n_batches']} batches, {rep['n_candidates_total']:,} candidates")
-
-    del s1, s23, k23, rare
+    n_batches = (s1.height + batch_size - 1) // batch_size
+    if all_batches_present(cand_dir, feat_dir, n_batches):
+        # resume after a crash in the scoring step: blocking is complete, so skip the ~13-20 min
+        # pool load + index rebuild entirely
+        rep = {"n_s1": s1.height, "n_batches": n_batches,
+               "n_candidates_total": sum(pl.scan_parquet(p).select(pl.len()).collect().item()
+                                         for p in sorted(cand_dir.glob("candidates_*.parquet")))}
+        _log(log_path, f"all {n_batches} batches already on disk -- skipping index build, scoring only")
+    else:
+        s23 = load_test_s23(country)
+        _log(log_path, f"loaded: {s1.height:,} test S1, {s23.height:,} test S2/S3 pool")
+        k23, rare = fused.build_country_index(s23)
+        _log(log_path, "S2/S3 index built")
+        rep = fused.run_country_with_index(s1, s23, k23, rare, budget_rows, batch_size, cand_dir, feat_dir)
+        _log(log_path, f"candidates+features done: {rep['n_batches']} batches, "
+                        f"{rep['n_candidates_total']:,} candidates")
+        del s23, k23, rare
+    del s1
     booster = lgb.Booster(model_file=str(MODEL_PATH))
     scored_dir = TEST_OUT / "scored" / country
     n_scored = score_batches(cand_dir, feat_dir, scored_dir, booster)

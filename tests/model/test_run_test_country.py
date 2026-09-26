@@ -38,3 +38,15 @@ def test_score_batches_stops_on_candidate_feature_mismatch(tmp_path):
     _write_batch(cdir, fdir, "00000", 3, 2)
     with pytest.raises(RuntimeError, match="STOP"):
         score_batches(cdir, fdir, sdir, _FakeBooster())
+
+
+def test_all_batches_present_requires_both_files_for_every_index(tmp_path):
+    from amlc.model.run_test_country import all_batches_present
+    cdir, fdir = tmp_path / "c", tmp_path / "f"
+    cdir.mkdir(); fdir.mkdir()
+    _write_batch(cdir, fdir, "00000", 1, 1)
+    _write_batch(cdir, fdir, "00001", 1, 1)
+    assert all_batches_present(cdir, fdir, 2)
+    assert not all_batches_present(cdir, fdir, 3)
+    (fdir / "features_00001.parquet").unlink()
+    assert not all_batches_present(cdir, fdir, 2)
