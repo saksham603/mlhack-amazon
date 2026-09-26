@@ -589,3 +589,10 @@ blocking_rank <= k (predictions subset of candidates by construction), 42 s:
 1,732,544 rows each. Local checks PASS (9 s). Official validator --check-ids PASS (72 s).
 matching_results.tsv 77,421,830 B; candidate_pairs.tsv 686,995,782 B. V1_REPORT.md written.
 Next: FIT data expansion (250K more S1 per country), data only, no training.
+
+## 23:35 - overnight: extra FIT data built for India (250K S1), starting US
+
+`build_fit_extra.py India 3000`: 250,000 extra FIT S1 (verified 0 overlap with the v1 50k sample),
+4,133,346 S2/S3 pool, 84 batches, 25,884,391 candidates, 685,457 positive labels, peak RSS 7.18GB
+(well under the 10.5GB ceiling). Runtime 23:09-23:35 (~25.5 min). No lingering processes after
+completion. Data only, per instruction -- no training run. Starting US extra FIT build next.

@@ -1,0 +1,10 @@
+{
+  "country": "India",
+  "n_s1": 250000,
+  "batch_size": 3000,
+  "n_batches": 84,
+  "n_candidates": 25884391,
+  "n_labeled_rows": 25884391,
+  "n_positive": 685457,
+  "peak_ram_mb": 7176.0
+}
