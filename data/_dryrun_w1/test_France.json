@@ -1,0 +1,8 @@
+{
+  "country": "France",
+  "n_s1": 259452,
+  "n_candidates": 33554286,
+  "n_batches": 87,
+  "batch_size": 3000,
+  "peak_ram_mb": 9406.0
+}

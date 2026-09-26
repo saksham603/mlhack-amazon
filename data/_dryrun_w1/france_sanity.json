@@ -1,0 +1,11 @@
+{
+ "threshold": 0.64,
+ "n_s1_with_candidates": 259450,
+ "candidates_per_s1_mean": 129.32852572750048,
+ "candidates_per_s1_median": 147.0,
+ "n_s1_with_ge1_prediction": 244839,
+ "frac_s1_with_ge1_prediction": 0.9436847176719985,
+ "predictions_per_s1_mean_among_predicted": 3.2807477566890895,
+ "total_predictions": 803255,
+ "note": "2 of 259452 France test S1 have zero candidates (blocking found nothing for them)"
+}
