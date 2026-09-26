@@ -2,6 +2,7 @@
 FIT S1 per country against the FULL S2/S3 pool of that country. Never runs on full S1 data, never
 chooses k or a cap, never writes candidate_pairs.tsv (T7 scope, not W1 itself).
 """
+import ctypes
 import json
 import time
 from pathlib import Path
@@ -15,6 +16,38 @@ from amlc.foundation import access
 OUT_DIR = access.DATA / "_dryrun_w1"
 COUNTRIES = ("US", "India")
 RAM_BUDGET_BYTES = 6 * 2**30  # generous for the 1% sample; not the full-run budget
+MIN_FREE_RAM_MB = 1024  # STOP floor (master prompt §7.4)
+
+
+class _MemStat(ctypes.Structure):
+    _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+               ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+               ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+               ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+               ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+
+def free_ram_mb() -> float:
+    """CG-11: checked, never a silent default. Added after L13 -- this module had no RAM check at
+    all before, unlike silver_run.py, even though a real run of it peaked at 10.1 GB."""
+    fn = ctypes.windll.kernel32.GlobalMemoryStatusEx
+    fn.argtypes = [ctypes.POINTER(_MemStat)]
+    fn.restype = ctypes.c_int
+    m = _MemStat()
+    m.dwLength = ctypes.sizeof(_MemStat)
+    if not fn(ctypes.byref(m)):
+        raise ctypes.WinError()
+    if m.ullAvailPhys <= 0 or m.ullAvailPhys > m.ullTotalPhys:
+        raise RuntimeError(f"implausible free RAM reading: {m.ullAvailPhys} of {m.ullTotalPhys}")
+    return round(m.ullAvailPhys / 2**20, 1)
+
+
+def check_ram_budget() -> None:
+    """CG-19/G-P9, applied here after L13 found this module lacked it. Raises rather than continuing
+    into a step that could exhaust memory; the caller logs and moves on (§7.4 STOP condition)."""
+    free = free_ram_mb()
+    if free < MIN_FREE_RAM_MB:
+        raise MemoryError(f"free RAM {free} MB is below the {MIN_FREE_RAM_MB} MB floor; STOP (§7.4)")
 
 
 def _true_links_for_sample(s1_gids: list[int]) -> pl.DataFrame:
@@ -33,6 +66,7 @@ def run_country(country: str) -> dict:
               "n_true_links": truth.height, "caps": {}}
 
     for cap in C.CAPS:
+        check_ram_budget()
         t0 = time.time()
         ram_before = peak_ram_mb()
         try:
@@ -68,7 +102,8 @@ def main() -> int:
     t0 = time.time()
     results = {}
     for country in COUNTRIES:
-        print(f"=== {country}", flush=True)
+        check_ram_budget()
+        print(f"=== {country} (free RAM {free_ram_mb()} MB)", flush=True)
         results[country] = run_country(country)
         print(f"  {json.dumps({k: v for k, v in results[country].items() if k != 'caps'})}", flush=True)
         for cap, cr in results[country]["caps"].items():

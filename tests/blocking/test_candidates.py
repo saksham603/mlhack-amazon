@@ -2,7 +2,7 @@
 import polars as pl
 import pytest
 
-from amlc.blocking import candidates
+from amlc.blocking import candidates, dryrun_w1
 
 
 def _silverish(rows):
@@ -63,6 +63,23 @@ def test_recall_at_k_counts_true_links_found_in_topk():
     truth = pl.DataFrame({"s1_gid": [1, 1, 1], "s23_gid": [10, 20, 30]}, schema={"s1_gid": pl.UInt32, "s23_gid": pl.UInt32})
     out = candidates.recall_at_k(topk, truth)
     assert out == {"recall": pytest.approx(2 / 3), "n_true_links": 3}
+
+
+def test_free_ram_mb_is_plausible():
+    # L13/CG-11: dryrun_w1.py had no RAM check at all; this proves the checked-tool reading is sane.
+    free = dryrun_w1.free_ram_mb()
+    assert 0 < free < 10_000_000  # some positive number of MB, well under an implausible total
+
+
+def test_check_ram_budget_raises_below_the_floor(monkeypatch):
+    monkeypatch.setattr(dryrun_w1, "free_ram_mb", lambda: dryrun_w1.MIN_FREE_RAM_MB - 1)
+    with pytest.raises(MemoryError, match="STOP"):
+        dryrun_w1.check_ram_budget()
+
+
+def test_check_ram_budget_passes_above_the_floor(monkeypatch):
+    monkeypatch.setattr(dryrun_w1, "free_ram_mb", lambda: dryrun_w1.MIN_FREE_RAM_MB + 1)
+    dryrun_w1.check_ram_budget()  # must not raise
 
 
 def test_recall_at_k_handles_no_true_links_without_dividing_by_zero():
