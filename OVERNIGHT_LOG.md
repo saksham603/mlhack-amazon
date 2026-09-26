@@ -434,3 +434,18 @@ Launched US (background bkiob7oag) immediately after.
 Commit: (data outputs only; small JSON summary at data/_dryrun_w1/test_France.json)
 Next: US, then India (largest, ~810k S1) -- then step 6 (assemble + validate output files).
 SELF-CHECK 19:38: ok
+
+## 20:13 Session interrupted mid-US-run; resumed via the resumability design
+Event: the harness/session was torn down and restarted while background task bkiob7oag (US TEST
+run) was in flight. Its completion notification arrived tagged "stopped" with "No completion
+record was found" -- not a clean finish. Checked state before assuming anything: index had been
+built (log showed "19:49:29 S2/S3 index built"), and 131 of the expected 221 candidate+feature
+batches were already written to data/_v1/test/candidates|features/US/ (matching counts, both dirs).
+scored_US.parquet did not exist (only written after ALL batches complete).
+Action: re-ran the identical command (`run_test_country US 3000`). run_batch()'s resumability
+(built in step 2, "skip a batch whose parquet already exists") means this costs only the ~11.6min
+index rebuild (not cached to disk, a known gap) plus the remaining ~90 batches, not a from-scratch
+221-batch run. This is exactly the scenario that feature was built for.
+Commit: (log only)
+Next: wait for US to finish (resumed, background b65fvc05d), then India, then step 6.
+SELF-CHECK 20:13: ok
