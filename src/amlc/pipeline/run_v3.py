@@ -126,34 +126,33 @@ def run_val() -> None:
         build("train", c, v1c["s1_gid"].unique(), v1c, OUT / "val")
 
 
+def subsample(d: pl.DataFrame) -> pl.DataFrame:
+    """All positives and hard negatives; 20% of easy negatives with weight 5 (deterministic hash)."""
+    hard = ((pl.col("label") == 1) | (pl.col("v1_rank") <= 10) | (pl.col("v3_rank") <= 10)
+            | ((pl.col("va_rank") <= 5) if KA else pl.lit(False))
+            | (pl.col("n_tset") >= 70) | (pl.col("a_tset") >= 70))
+    keep = (pl.struct("s1_gid", "s23_gid").hash(seed=SEED) % 1000) < int(EASY_KEEP * 1000)
+    return d.filter(hard | keep).with_columns(pl.when(hard).then(1.0).otherwise(1.0 / EASY_KEEP).cast(pl.Float32).alias("w"))
+
+
+SUB_COLS = ["s1_gid", "s23_gid", "label", "v1_rank", "v3_rank", "n_tset", "a_tset"] + (["va_rank"] if KA else [])
+
+
 def train() -> dict:
+    from amlc.model.lowmem_train import fit_lowmem
+    from amlc.pipeline.mem import free_gb
     t0 = time.time()
-    parts = []
-    for f in sorted(glob.glob(str(OUT / "fit" / "*.parquet"))):
-        d = pl.read_parquet(f, columns=["s1_gid", "s23_gid", "label", *FEATURES])
-        hard = ((pl.col("label") == 1) | (pl.col("v1_rank") <= 10) | (pl.col("v3_rank") <= 10)
-                | ((pl.col("va_rank") <= 5) if KA else pl.lit(False))
-                | (pl.col("n_tset") >= 70) | (pl.col("a_tset") >= 70))
-        keep = (pl.struct("s1_gid", "s23_gid").hash(seed=SEED) % 1000) < int(EASY_KEEP * 1000)
-        parts.append(d.filter(hard | keep).with_columns(pl.when(hard).then(1.0).otherwise(1.0 / EASY_KEEP).cast(pl.Float32).alias("w")))
-    df = pl.concat(parts)
-    ho = df.select("s1_gid").unique().sort("s1_gid").sample(fraction=0.1, seed=SEED)
-    tr, va = df.join(ho, on="s1_gid", how="anti"), df.join(ho, on="s1_gid", how="semi")
-    info = {"train_rows": tr.height, "train_pos": int(tr["label"].sum()), "holdout_rows": va.height}
-    log(f"train rows {tr.height:,} (pos {info['train_pos']:,}), holdout {va.height:,}")
-    dtr = lgb.Dataset(to_x(tr), label=tr["label"].to_numpy(), weight=tr["w"].to_numpy(), feature_name=FEATURES)
-    dva = lgb.Dataset(to_x(va), label=va["label"].to_numpy(), weight=va["w"].to_numpy(), reference=dtr, feature_name=FEATURES)
-    del df, tr, va, parts
-    booster = lgb.train(PARAMS, dtr, num_boost_round=3000, valid_sets=[dva],
-                        callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(200)])
+    files = sorted(glob.glob(str(OUT / "fit" / "*.parquet")))
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    booster.save_model(str(MODEL_PATH), num_iteration=booster.best_iteration)
+    booster = fit_lowmem(len(files), lambda i, cols: pl.read_parquet(files[i], columns=cols), FEATURES, subsample,
+                         PARAMS, SEED, MODEL_PATH, lambda m: log(m), sub_cols=SUB_COLS)
     imp = sorted(zip(FEATURES, booster.feature_importance("gain")), key=lambda x: -x[1])
-    info.update({"best_iteration": booster.best_iteration, "train_minutes": round((time.time() - t0) / 60, 1),
-                 "top_gain": [(f, round(float(g))) for f, g in imp[:20]]})
+    info = {"best_iteration": booster.best_iteration, "train_minutes": round((time.time() - t0) / 60, 1),
+            "top_gain": [(f, round(float(g))) for f, g in imp[:20]], "free_gb_after_train": free_gb()}
+    del booster
     # evaluate
     booster = lgb.Booster(model_file=str(MODEL_PATH))
-    val = pl.concat([pl.read_parquet(f) for f in sorted(glob.glob(str(OUT / "val" / "*.parquet")))])
+    val = pl.concat([pl.read_parquet(f, columns=["s1_gid", "s23_gid", "country", *FEATURES]) for f in sorted(glob.glob(str(OUT / "val" / "*.parquet")))])
     scored = val.select("s1_gid", "s23_gid", "country").with_columns(pl.Series("prob", booster.predict(to_x(val))))
     scored.write_parquet(OUT / "val_scored.parquet")
     a, b = V.sample_validation_halves()

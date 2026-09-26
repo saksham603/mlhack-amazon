@@ -22,7 +22,7 @@ from amlc.blocking import v3
 from amlc.features import w3
 from amlc.foundation import access
 from amlc.pipeline import run_v3 as R
-from amlc.pipeline.mem import free_gb
+from amlc.pipeline.mem import atomic_write_parquet, free_gb
 
 if R.KA <= 0:
     raise SystemExit("set AMLC_KA (e.g. 10) so run_v3 uses data/_v31 and the address features")
@@ -43,7 +43,7 @@ def _finish(u: pl.DataFrame, r1, r23, country, labels, booster, dst: Path) -> in
              .with_columns(pl.col("label").fill_null(0)))
     if booster is not None:
         x = x.with_columns(pl.Series("prob", booster.predict(R.to_x(x))))
-    x.write_parquet(dst)
+    atomic_write_parquet(x, dst)
     return x.height
 
 
@@ -90,7 +90,7 @@ def test() -> None:
             k23, rare = v3.build_index(r23.select(KEY_COLS), v3.NAME_KINDS)
             log(f"test/{c}: name index {k23.height:,} keys, {len(need3)} batches")
             for b, rb in need3:
-                v3.candidates(rb.select(KEY_COLS), k23, rare, R.K3).write_parquet(c3_dir / f"{c}_{b:05d}.parquet")
+                atomic_write_parquet(v3.candidates(rb.select(KEY_COLS), k23, rare, R.K3), c3_dir / f"{c}_{b:05d}.parquet")
             del k23, rare
         need = [(b, rb) for b, rb in batches if not (out / f"{c}_{b:05d}.parquet").exists()]
         if not need:

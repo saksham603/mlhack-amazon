@@ -18,8 +18,10 @@ import numpy as np
 import polars as pl
 
 from amlc.model import validate as V
+from amlc.model.lowmem_train import fit_lowmem
 from amlc.model.pass2 import P2_FEATURES, add_pass2
 from amlc.pipeline import run_v3 as R
+from amlc.pipeline.mem import atomic_write_parquet
 
 FOLD_MODELS = [R.MODEL_PATH.with_name(R.MODEL_PATH.stem + f"_fold{k}.txt") for k in (0, 1)]
 P2_MODEL = R.MODEL_PATH.with_name(R.MODEL_PATH.stem + "_pass2.txt")
@@ -35,35 +37,15 @@ def fold_of(df: pl.DataFrame) -> pl.Series:
     return (df["s1_gid"].hash(seed=R.SEED) % 2).cast(pl.Int8)
 
 
-def _subsample(d: pl.DataFrame) -> pl.DataFrame:
-    hard = ((pl.col("label") == 1) | (pl.col("v1_rank") <= 10) | (pl.col("v3_rank") <= 10)
-            | ((pl.col("va_rank") <= 5) if R.KA else pl.lit(False)) | (pl.col("n_tset") >= 70) | (pl.col("a_tset") >= 70))
-    keep = (pl.struct("s1_gid", "s23_gid").hash(seed=R.SEED) % 1000) < int(R.EASY_KEEP * 1000)
-    return d.filter(hard | keep).with_columns(pl.when(hard).then(1.0).otherwise(1.0 / R.EASY_KEEP).cast(pl.Float32).alias("w"))
-
-
-def _fit(df: pl.DataFrame, feats: list, path: Path) -> None:
-    ho = df.select("s1_gid").unique().sort("s1_gid").sample(fraction=0.1, seed=R.SEED)
-    tr, va = df.join(ho, on="s1_gid", how="anti"), df.join(ho, on="s1_gid", how="semi")
-    x = lambda d: d.select([pl.col(f).cast(pl.Float32) for f in feats]).to_numpy()  # noqa: E731
-    dtr = lgb.Dataset(x(tr), label=tr["label"].to_numpy(), weight=tr["w"].to_numpy(), feature_name=feats)
-    dva = lgb.Dataset(x(va), label=va["label"].to_numpy(), weight=va["w"].to_numpy(), reference=dtr, feature_name=feats)
-    b = lgb.train(R.PARAMS, dtr, num_boost_round=3000, valid_sets=[dva],
-                  callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(500)])
-    b.save_model(str(path), num_iteration=b.best_iteration)
-    log(f"saved {path.name}: {b.best_iteration} rounds, {tr.height:,} rows")
-
-
 def folds() -> None:
     files = sorted(glob.glob(str(R.OUT / "fit" / "*.parquet")))
     for k in (0, 1):
         if FOLD_MODELS[k].exists():
             continue
-        parts = []
-        for f in files:
-            d = pl.read_parquet(f, columns=["s1_gid", "s23_gid", "label", *R.FEATURES])
-            parts.append(_subsample(d.filter(fold_of(d) != k)))  # train on the OTHER half
-        _fit(pl.concat(parts), R.FEATURES, FOLD_MODELS[k])
+        def load(i, cols, k=k):  # train on the OTHER half of FIT S1s
+            d = pl.read_parquet(files[i], columns=cols)
+            return d.filter(fold_of(d) != k)
+        fit_lowmem(len(files), load, R.FEATURES, R.subsample, R.PARAMS, R.SEED, FOLD_MODELS[k], log, sub_cols=R.SUB_COLS)
 
 
 def _p1(d: pl.DataFrame, boosters: list, oof: bool) -> np.ndarray:
@@ -96,7 +78,7 @@ def feats() -> None:
             out = add_pass2(d.select("s1_gid", "s23_gid"), _p1(d, boosters, oof), r23)
             if out.height != d.height:
                 raise AssertionError(f"{f}: pass-2 rows {out.height} != {d.height}. STOP.")
-            out.select("s1_gid", "s23_gid", *P2_FEATURES).write_parquet(dst)
+            atomic_write_parquet(out.select("s1_gid", "s23_gid", *P2_FEATURES), dst)
             n += 1
         log(f"pass-2 features {sub}: {n} new files of {len(src)}")
 
@@ -111,13 +93,15 @@ def _load(sub: str, cols: list) -> pl.DataFrame:
 
 
 def train() -> dict:
-    parts = []
-    for f in sorted((R.OUT / "fit").glob("*.parquet")):
-        d = pl.read_parquet(f, columns=["s1_gid", "s23_gid", "label", *R.FEATURES])
-        p2 = pl.read_parquet(R.OUT / "fit_p2" / Path(f).name)
-        parts.append(_subsample(d.join(p2, on=["s1_gid", "s23_gid"], how="inner", validate="1:1")))
-    _fit(pl.concat(parts), FEATS2, P2_MODEL)
-    del parts
+    files = sorted((R.OUT / "fit").glob("*.parquet"))
+    def load(i, cols):
+        d = pl.read_parquet(files[i], columns=[c for c in cols if c not in P2_FEATURES])
+        p2 = pl.read_parquet(R.OUT / "fit_p2" / files[i].name, columns=["s1_gid", "s23_gid", *[c for c in cols if c in P2_FEATURES]])
+        out = d.join(p2, on=["s1_gid", "s23_gid"], how="inner", validate="1:1")
+        if out.height != d.height:
+            raise AssertionError(f"{files[i].name}: pass-2 join lost rows. STOP.")
+        return out
+    fit_lowmem(len(files), load, FEATS2, R.subsample, R.PARAMS, R.SEED, P2_MODEL, log, sub_cols=R.SUB_COLS)
     b = lgb.Booster(model_file=str(P2_MODEL))
     val = _load("val", ["s1_gid", "s23_gid", *R.FEATURES])
     x = val.select([pl.col(f).cast(pl.Float32) for f in FEATS2]).to_numpy()
@@ -143,10 +127,43 @@ def test() -> None:
             continue
         d = pl.read_parquet(f, columns=["s1_gid", "s23_gid", *R.FEATURES]).join(p2, on=["s1_gid", "s23_gid"], how="inner", validate="1:1")
         x = d.select([pl.col(c).cast(pl.Float32) for c in FEATS2]).to_numpy()
-        p2.join(d.select("s1_gid", "s23_gid").with_columns(pl.Series("prob2", b.predict(x))), on=["s1_gid", "s23_gid"],
-                how="left", validate="1:1").write_parquet(dst)
+        atomic_write_parquet(p2.join(d.select("s1_gid", "s23_gid").with_columns(pl.Series("prob2", b.predict(x))),
+                                     on=["s1_gid", "s23_gid"], how="left", validate="1:1"), dst)
     log("pass-2 test probabilities written")
 
 
+def assemble(name: str) -> dict:
+    """output/<name>/ from pass-2 probabilities; candidates = exactly the pass-1 candidate set."""
+    from amlc.model.assemble_output import build_id_maps, group_ids, links_to_tsv, write_tsv
+    from amlc.model.predict import predictions_at_threshold
+    thr = json.loads((R.OUT / "report_pass2.json").read_text(encoding="utf-8"))["threshold"]
+    base = sorted(R.TEST_SCORED.glob("*.parquet"))
+    p2dir = R.OUT / (R.TEST_SCORED.name + "_p2")
+    pred = predictions_at_threshold(pl.concat([pl.read_parquet(p2dir / f.name, columns=["s1_gid", "s23_gid", "prob2"])
+                                               .filter(pl.col("prob2") >= thr).rename({"prob2": "prob"}) for f in base]), thr)
+    s1_map, s23_map = build_id_maps()
+    all_s1 = s1_map.select("s1_id")
+    dst = R.OUTPUT / name
+    write_tsv(links_to_tsv(pred, s1_map, s23_map, all_s1, "matched_id"), "matched_id", "matched_entity_ids", dst / "matching_results.tsv")
+    n_pairs, written = 0, set()
+    with open(dst / "candidate_pairs.tsv", "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("source1_entity_id\tcandidate_entity_ids\n")
+        for f in base:
+            b = pl.read_parquet(f, columns=["s1_gid", "s23_gid"])
+            n_pairs += b.height
+            rows = group_ids(b, s1_map, s23_map)
+            written.update(rows["s1_id"].to_list())
+            fh.write("".join(f"{x}\t{y}\n" for x, y in rows.iter_rows()))
+        empty = set(all_s1["s1_id"].to_list()) - written
+        fh.write("".join(f"{x}\t\n" for x in sorted(empty)))
+    rep = {"name": name, "threshold": thr, "n_predictions": pred.height, "candidate_pairs": n_pairs,
+           "s1_with_predictions": pred["s1_gid"].n_unique(), "n_test_s1": all_s1.height}
+    (dst / "assemble_report.json").write_text(json.dumps(rep, indent=2), encoding="utf-8")
+    return rep
+
+
 if __name__ == "__main__":
-    {"folds": folds, "feats": feats, "train": train, "test": test}[sys.argv[1]]()
+    if sys.argv[1] == "assemble":
+        print(json.dumps(assemble(sys.argv[2]), indent=1))
+    else:
+        {"folds": folds, "feats": feats, "train": train, "test": test}[sys.argv[1]]()

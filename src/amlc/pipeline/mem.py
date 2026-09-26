@@ -34,3 +34,13 @@ def _rss_gb_unused() -> float:
     c.cb = ctypes.sizeof(_PMC)
     ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.windll.kernel32.GetCurrentProcess(), ctypes.byref(c), c.cb)
     return round(c.WorkingSetSize / 2**30, 2)
+
+
+def atomic_write_parquet(df, path) -> None:
+    """Write to <path>.tmp then rename: a killed process can never leave a partial file under the final
+    name (resumable steps skip files that exist, so a partial one would be silently trusted)."""
+    import pathlib
+    path = pathlib.Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    df.write_parquet(tmp)
+    os.replace(tmp, path)
