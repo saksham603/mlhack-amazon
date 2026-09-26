@@ -1,0 +1,8 @@
+{
+  "country": "US",
+  "fraction": 0.05,
+  "n_s1": 46327,
+  "n_candidates": 6354624,
+  "candidates_per_s1": 137.16890798022752,
+  "peak_ram_mb": 11801.9
+}

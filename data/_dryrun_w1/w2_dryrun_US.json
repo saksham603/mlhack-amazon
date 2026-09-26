@@ -1,0 +1,11 @@
+{
+  "country": "US",
+  "slice_n_candidates": 1272209,
+  "n_s1_batches": 1,
+  "batch_size": 10000,
+  "n_s1_total": 9265,
+  "feature_rows_total": 1272209,
+  "peak_ram_mb": 3942.8,
+  "ram_ceiling_mb": 12288,
+  "within_12gb_ceiling": true
+}

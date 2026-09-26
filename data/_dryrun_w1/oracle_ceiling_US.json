@@ -1,0 +1,10 @@
+{
+  "country": "US",
+  "n_s1": 9265,
+  "f05_macro": 0.9782738726371064,
+  "n_scored": 9265,
+  "n_true_links": 31991,
+  "n_recallable": 30075,
+  "recall_ceiling": 0.9401081554187115,
+  "peak_ram_mb": 10105.3
+}

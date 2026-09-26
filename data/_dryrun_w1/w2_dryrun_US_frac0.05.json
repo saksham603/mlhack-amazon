@@ -1,0 +1,11 @@
+{
+  "tag": "US_frac0.05",
+  "slice_n_candidates": 6354624,
+  "n_s1_batches": 5,
+  "batch_size": 10000,
+  "n_s1_total": 46327,
+  "feature_rows_total": 6354624,
+  "peak_ram_mb": 4330.8,
+  "ram_ceiling_mb": 12288,
+  "within_12gb_ceiling": true
+}
