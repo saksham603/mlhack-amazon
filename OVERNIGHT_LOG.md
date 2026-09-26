@@ -289,3 +289,24 @@ fixes.
 Commit: 6af6534
 Next: step 2, fused batched pipeline (D-S1..D-S3)
 SELF-CHECK 17:57: ok
+
+## 18:10 Sprint step 2 (code) + step 3-4 prep committed; measured dry run in progress
+Action: Wrote src/amlc/pipeline/fused.py (score_and_rank_batch, run_batch, run_country --
+D-S1..D-S3: build S2/S3 key index once per country, batch S1s, write blocking_score/blocking_rank
+1..150 columns per D-S3) and run_country.py CLI. 3/3 new tests pass (score/rank correctness,
+per-batch parquet writes, full-batch coverage). Committed 79ca4ca.
+Found: user installed lightgbm 4.7.0 (requirements.lock updated) -- numpy 2.5.3 came with it as a
+dependency. D-S8 (train.py) and D-S6 (dataset.py, build_training.py) written and committed aa913db;
+LightGBM smoke-tested end to end on synthetic separable data (3/3 tests pass).
+BLOCKED (flagged to user, not yet resolved): D-S7 (tune threshold on VAL-A, report on VAL-B) needs
+amlc.eval.scorer extended to score a VALIDATION S1 subset -- that module is the only place allowed
+to read VALIDATION labels (access._authorize), and src/amlc/eval/ is outside this sprint's
+pre-authorized write scope (pipeline/features/model/blocking only). Per sprint §7.6 this is a STOP
+condition (needs a gate-adjacent change); asked the user, continuing other unblocked work meanwhile.
+Measured dry run (5% US, batch_size=3000, fused pipeline) launched ~17:52, still running at 18:10 --
+longer than the unbatched 5% run (which itself took ~900s+) since this also does feature extraction
+per batch (16 batches). Will report peak RAM once it completes.
+Commit: 79ca4ca, aa913db
+Next: wait for the 5% US measured dry run; resolve the D-S7 blocker; then step 3 real training-set
+build once batch_size is confirmed safe.
+SELF-CHECK 18:10: ok
