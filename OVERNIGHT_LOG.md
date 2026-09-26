@@ -449,3 +449,27 @@ index rebuild (not cached to disk, a known gap) plus the remaining ~90 batches, 
 Commit: (log only)
 Next: wait for US to finish (resumed, background b65fvc05d), then India, then step 6.
 SELF-CHECK 20:13: ok
+
+## 21:10 Found and fixed: the orphaned process was still alive and racing the resumed run
+Mistake found: the "stopped" background task (bkiob7oag) from the session interruption was never
+actually killed at the OS level -- PID 14200 (C:\Python313\python.exe) was still alive and still
+running the ORIGINAL US test job, concurrently with the NEW resumed run (b65fvc05d) I started
+right after. This explains the very low free RAM (2.9GB, then system-wide 2.09GB/87% load) at the
+resumed run's start -- two processes both trying to hold the ~8GB S2/S3 index in memory at once.
+How caught: the resumed run finished (21:02:44, peak RAM 8,855.1 MB -- survived the tight window),
+but its own self-reported n_candidates_total (88,832,099) didn't match the scored row count
+(88,831,560), a 539-row gap. Investigated by scanning every candidate/feature batch file pair
+independently: exactly ONE batch (00212) was inconsistent, 403,361 candidate rows vs 403,360
+feature rows -- classic symptom of two processes writing the same file path concurrently.
+Process-kill was denied by the tool permission layer (Stop-Process flagged "interfere with
+workloads"); asked the user to kill PID 14200/2528 themselves. Confirmed dead (system free RAM
+recovered from ~2GB to 9,073.6 MB). Deleted the corrupted batch 00212 (both candidates and
+features parquet) and the stale scored_US.parquet built from it; re-ran run_test_country US --
+resumability skips the other 221 good batches, only batch 00212 and the final scoring/join step
+are redone.
+Lesson for the report: the resumability design (skip a batch whose parquet exists) assumes a
+CLEAN process exit, not a zombie process left running alongside a new one. A file lock or PID
+check would close this gap -- not implemented tonight (time), flagged as a real gap for tomorrow.
+Commit: (log only; the repair run is in progress, background bg5nii4qy)
+Next: wait for the repaired US run, verify counts match exactly this time, then India, then step 6.
+SELF-CHECK 21:10: ok
