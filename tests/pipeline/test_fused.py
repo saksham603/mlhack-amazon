@@ -72,3 +72,30 @@ def test_run_country_processes_all_s1_across_batches(tmp_path):
     for f in written_cand:
         s1_seen |= set(pl.read_parquet(f)["s1_gid"].to_list())
     assert s1_seen == set(range(n))  # every S1 matched itself in s23 (identical names) -> all present
+
+
+def test_build_country_index_reused_across_two_runs(tmp_path):
+    n = 4
+    s1 = _side("s1_gid", list(range(n)), [f"name{i}" for i in range(n)])
+    s23 = _side("s23_gid", [100 + i for i in range(n)], [f"name{i}" for i in range(n)])
+    k23, rare = fused.build_country_index(s23)
+
+    r1 = fused.run_country_with_index(s1, s23, k23, rare, budget_rows=10_000, batch_size=2,
+                                       candidates_dir=tmp_path / "c1", features_dir=tmp_path / "f1")
+    r2 = fused.run_country_with_index(s1, s23, k23, rare, budget_rows=10_000, batch_size=2,
+                                       candidates_dir=tmp_path / "c2", features_dir=tmp_path / "f2")
+    assert r1["n_candidates_total"] == r2["n_candidates_total"] > 0  # same index -> same result
+
+
+def test_run_batch_skips_when_output_already_exists(tmp_path):
+    n = 2
+    s1 = _side("s1_gid", list(range(n)), [f"name{i}" for i in range(n)])
+    s23 = _side("s23_gid", [100 + i for i in range(n)], [f"name{i}" for i in range(n)])
+    k23, rare = fused.build_country_index(s23)
+    cand_dir, feat_dir = tmp_path / "candidates", tmp_path / "features"
+
+    first = fused.run_batch(s1, s23, k23, rare, 10_000, cand_dir, feat_dir, batch_idx=0)
+    assert first["skipped"] is False
+    second = fused.run_batch(s1, s23, k23, rare, 10_000, cand_dir, feat_dir, batch_idx=0)
+    assert second["skipped"] is True
+    assert second["n_candidates"] == first["n_candidates"]

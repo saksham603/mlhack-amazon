@@ -43,33 +43,47 @@ def score_and_rank_batch(k1_batch: pl.DataFrame, k23: pl.DataFrame, rare: pl.Dat
     return ranked.select("s1_gid", "s23_gid", "blocking_score", "blocking_rank")
 
 
+def build_country_index(s23: pl.DataFrame, cap: int = CAP) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Builds (k23, rare) ONCE for a country's S2/S3 pool. Reuse the result across every S1 sample
+    drawn from that same (dataset, country) pool (e.g. FIT and VALIDATION both draw from the same
+    TRAIN pool) instead of rebuilding this ~20min step per sample (user go, 2026-09-26 18:30)."""
+    kinds = NAME_KINDS + ADDR_KINDS
+    k23 = v2.build_keys(s23.select("s23_gid", *[c for c in S1_COLS if c != "name_legal_form"]), "s23_gid", kinds)
+    rare = v2.idf_table(k23, s23.height, cap)
+    return k23, rare
+
+
 def run_batch(s1_batch: pl.DataFrame, s23: pl.DataFrame, k23: pl.DataFrame, rare: pl.DataFrame,
               budget_rows: int, candidates_dir: Path, features_dir: Path, batch_idx: int) -> dict:
-    """s1_batch: (s1_gid, *S1_COLS). s23: (s23_gid, *S1_COLS) -- the full country pool, resident once."""
+    """s1_batch: (s1_gid, *S1_COLS). s23: (s23_gid, *S1_COLS) -- the full country pool, resident once.
+    Resumable (sprint 6a): if this batch's candidate+feature parquet already exist, skip recomputing.
+    """
+    cand_path = candidates_dir / f"candidates_{batch_idx:05d}.parquet"
+    feat_path = features_dir / f"features_{batch_idx:05d}.parquet"
+    if cand_path.exists() and feat_path.exists():
+        return {"batch_idx": batch_idx, "n_s1": s1_batch.height,
+                "n_candidates": pl.scan_parquet(cand_path).select(pl.len()).collect().item(), "skipped": True}
+
     kinds = NAME_KINDS + ADDR_KINDS
     k1_batch = v2.build_keys(s1_batch.select("s1_gid", *[c for c in S1_COLS if c != "name_legal_form"]),
                               "s1_gid", kinds)
     candidates = score_and_rank_batch(k1_batch, k23, rare, budget_rows)
     candidates_dir.mkdir(parents=True, exist_ok=True)
-    candidates.write_parquet(candidates_dir / f"candidates_{batch_idx:05d}.parquet")
+    candidates.write_parquet(cand_path)
 
     s23_needed = s23.join(candidates.select("s23_gid").unique(), on="s23_gid", how="semi")
     feats = pair_features(candidates.select("s1_gid", "s23_gid"), s1_batch, s23_needed)
     features_dir.mkdir(parents=True, exist_ok=True)
-    feats.write_parquet(features_dir / f"features_{batch_idx:05d}.parquet")
+    feats.write_parquet(feat_path)
 
     n = candidates.height
     del k1_batch, candidates, s23_needed, feats
-    return {"batch_idx": batch_idx, "n_s1": s1_batch.height, "n_candidates": n}
+    return {"batch_idx": batch_idx, "n_s1": s1_batch.height, "n_candidates": n, "skipped": False}
 
 
-def run_country(s1_full: pl.DataFrame, s23: pl.DataFrame, budget_rows: int, batch_size: int,
-                 candidates_dir: Path, features_dir: Path) -> dict:
-    """s1_full: ALL S1 rows for this country (s1_gid, *S1_COLS), not sampled. Builds k23/rare once."""
-    kinds = NAME_KINDS + ADDR_KINDS
-    k23 = v2.build_keys(s23.select("s23_gid", *[c for c in S1_COLS if c != "name_legal_form"]), "s23_gid", kinds)
-    rare = v2.idf_table(k23, s23.height, CAP)
-
+def run_country_with_index(s1_full: pl.DataFrame, s23: pl.DataFrame, k23: pl.DataFrame, rare: pl.DataFrame,
+                            budget_rows: int, batch_size: int, candidates_dir: Path, features_dir: Path) -> dict:
+    """Same as run_country, but takes an already-built (k23, rare) index (build_country_index)."""
     n_s1 = s1_full.height
     n_batches = (n_s1 + batch_size - 1) // batch_size
     batch_reports = []
@@ -78,3 +92,10 @@ def run_country(s1_full: pl.DataFrame, s23: pl.DataFrame, budget_rows: int, batc
         batch_reports.append(run_batch(batch, s23, k23, rare, budget_rows, candidates_dir, features_dir, bi))
     return {"n_s1": n_s1, "n_batches": n_batches, "batch_size": batch_size,
             "n_candidates_total": sum(b["n_candidates"] for b in batch_reports), "batches": batch_reports}
+
+
+def run_country(s1_full: pl.DataFrame, s23: pl.DataFrame, budget_rows: int, batch_size: int,
+                 candidates_dir: Path, features_dir: Path) -> dict:
+    """s1_full: ALL S1 rows for this country (s1_gid, *S1_COLS), not sampled. Builds k23/rare once."""
+    k23, rare = build_country_index(s23)
+    return run_country_with_index(s1_full, s23, k23, rare, budget_rows, batch_size, candidates_dir, features_dir)

@@ -7,6 +7,7 @@ import polars as pl
 
 from amlc.eval import scorer
 from amlc.foundation import access
+from amlc.model.predict import predictions_at_threshold
 
 N_PER_COUNTRY = 20_000
 SEED = 20260926
@@ -27,10 +28,12 @@ def sample_validation_halves(n_per_country: int = N_PER_COUNTRY, seed: int = SEE
 
 
 def tune_threshold(scored: pl.DataFrame, s1_subset_a: pl.Series, thresholds: list[float]) -> dict:
-    """scored: (s1_gid, s23_gid, prob) for half A's S1s. Sweeps thresholds via scorer.score()."""
+    """scored: (s1_gid, s23_gid, prob) for half A's S1s. Sweeps thresholds via scorer.score(); G-M3
+    (each S23 kept only on its highest-probability S1) is enforced before every scored call, since
+    scorer.score() raises on a duplicated s23_gid."""
     curve = []
     for t in thresholds:
-        pred = scored.filter(pl.col("prob") >= t).select("s1_gid", "s23_gid")
+        pred = predictions_at_threshold(scored, t)
         r = scorer.score(pred, s1_subset=s1_subset_a)
         curve.append({"threshold": t, "f05": r["f05"]})
     best = max(curve, key=lambda r: r["f05"])
@@ -38,6 +41,7 @@ def tune_threshold(scored: pl.DataFrame, s1_subset_a: pl.Series, thresholds: lis
 
 
 def report_on_b(scored: pl.DataFrame, s1_subset_b: pl.Series, threshold: float) -> dict:
-    """scored: (s1_gid, s23_gid, prob) for half B's S1s. Full scorer.score() report at `threshold`."""
-    pred = scored.filter(pl.col("prob") >= threshold).select("s1_gid", "s23_gid")
+    """scored: (s1_gid, s23_gid, prob) for half B's S1s. Full scorer.score() report at `threshold`
+    (G-M3 enforced first, same as tune_threshold)."""
+    pred = predictions_at_threshold(scored, threshold)
     return scorer.score(pred, s1_subset=s1_subset_b)
