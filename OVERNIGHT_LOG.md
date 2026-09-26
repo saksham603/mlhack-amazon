@@ -640,3 +640,18 @@ Blocking-miss measurement (FIT v1 sample, v1 k=150 misses): India 35,514 missed,
 name, 92% address token_set >= 80; US 10,566 missed, 27% / 79%. -> blocking v3 keys (name x address
 token, region|name) written: src/amlc/blocking/v3.py, eval in progress.
 User asleep until ~20:00; uploads are the user's. SELF-CHECK 02:45: ok
+
+## 04:08 - PHASE C/D combined: candidate v3 + retrain -> VAL-B F0.5 0.9592 (v1 leaderboard was 0.773)
+Pipeline src/amlc/pipeline/run_v3.py: candidates = v1 top-30 UNION blocking-v3 top-20 (name x address
+token keys + region|no-space-name + region|skeleton keys, src/amlc/blocking/v3.py), 55 features
+(9 v1 + 46 w3), trained on ALL 600k FIT S1 (v1 50k sample + 250k extra per country), easy negatives
+subsampled 20% (weight 5), lgbm lr=0.1, 1830 rounds, early stop on 10% S1 holdout, 24.1 min.
+VAL-B: F0.5 0.9592 (India 0.9501, US 0.9684), threshold 0.72, pair precision 0.989, pair recall 0.907,
+empty share 0.062, ~44.2 candidates/S1 (v1 was 104-137 at k=150 for similar recall).
+Top gain features: ctx_c_gap (rank-vs-best-candidate margin), v3_score, a_tset (address fuzzy match).
+By bucket: singleton 0.958, 1-2 matches 0.937, 3-4 0.964, 5+ 0.970 -- ambiguous small-match-count S1s
+are still the weakest slice.
+User has requested AWS GPU quota (8 on free account, 48 on paid, Mumbai + N.Virginia); cutoff 09:00
+IST to decide whether to add a neural model, laptop plan proceeds regardless.
+Starting: error analysis (src/amlc/model/error_v3.py) + full TEST scoring on v3 candidates (~2h,
+src/amlc/pipeline/run_v3.py test). SELF-CHECK 04:08: ok
