@@ -1,0 +1,11 @@
+{
+  "threshold": 0.64,
+  "k": 30,
+  "n_test_s1": 1732544,
+  "n_candidate_pairs": 51567118,
+  "s1_with_candidates": 1732499,
+  "s1_without_candidates": 45,
+  "n_predictions": 4254858,
+  "match_rows_written": 1732544,
+  "s1_with_predictions": 1482874
+}

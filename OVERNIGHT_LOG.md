@@ -579,3 +579,13 @@ validator keeps a Python set of every candidate id per S1 (validate_submission.p
 estimated ~25+ GB at k=150 (206.7M str objects + 1.73M sets), so it cannot pass on this 16 GB
 machine. The rule and the "valid submission tonight" goal conflict -> stopped for user decision.
 Rough validator RAM estimates: k=20 ~4-5 GB, k=30 ~5-6 GB, k=50 ~9 GB (risky).
+
+## 23:10 - v1 submission built at k=30, official validator PASS
+
+User chose k=30 (validator-feasible) over the rule's k=150. k=150 files renamed to
+output/*_k150.tsv (kept). `assemble_output.py` now builds both files from the scored parquets with
+blocking_rank <= k (predictions subset of candidates by construction), 42 s:
+51,567,118 candidate pairs, 45 S1 with no candidates, 4,254,858 predictions over 1,482,874 S1,
+1,732,544 rows each. Local checks PASS (9 s). Official validator --check-ids PASS (72 s).
+matching_results.tsv 77,421,830 B; candidate_pairs.tsv 686,995,782 B. V1_REPORT.md written.
+Next: FIT data expansion (250K more S1 per country), data only, no training.
