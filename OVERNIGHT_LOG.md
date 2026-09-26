@@ -680,3 +680,24 @@ built separately, never together; FIT/VAL reuse stored v3.0 name candidates; fre
 (src/amlc/pipeline/mem.py). Regression: name candidates 95,964/95,964 and address candidates
 97,739/97,739 identical to the stored ones; name index now 27 s, address index 145 s, free RAM >= 7.6 GB.
 New runner src/amlc/pipeline/run_v31.py -> data/_v31, models/lgbm_v31.txt (v3.0 artifacts untouched).
+
+## 05:22 - Unattended chain in Windows Task Scheduler (survives a Claude session crash)
+User reported Python peaking near 8 GB freezes the laptop, and went to sleep. Changes:
+- Training no longer holds the table 3x: src/amlc/model/lowmem_train.py fills one pre-sized float32
+  matrix (holdout rows at the end = a view), releases it right after LightGBM bins it. Expected peak
+  ~6 GB for the v3.1 train (was 3 copies). Used by run_v3 train and all pass-2 training.
+- Every resumable write is atomic (.tmp then rename): a kill can never leave a partial file under a
+  final name. The chain quarantines (moves, never deletes) leftover .tmp / unreadable files first.
+- src/amlc/pipeline/chain_day2.py runs all remaining steps in order with done-markers
+  (data/_v31/chain/*.done, status.json), stops at the first failure, and first WAITS until no other
+  pipeline python process runs (never two heavy jobs). Launched by Task Scheduler task
+  "amlc_day2_chain" (scripts/run_chain.cmd, log data/_v2/logs/chain_driver.log).
+- Killing the session-bound job for a clean handover was blocked by the auto-mode safety check, so the
+  current job (v3.1 FIT build -> v3.1 train) finishes by itself; the chain then skips what it produced.
+- Power: AC standby and hibernate = never; on AC, battery 100%.
+Chain steps: v31_val, v31_fit, v31_train, v31_test (~2 h), assemble_base -> output/v31_base,
+validate_base, p2_folds, p2_feats, p2_train, p2_test, assemble_p2 -> output/v31_pass2, validate_p2.
+IF CLAUDE IS NOT RESPONDING: read data/_v31/chain/status.json. Upload output/v31_base/matching_results.tsv
+once validate_base is ok, and output/v31_pass2/matching_results.tsv once validate_p2 is ok (only the best
+public score counts, so uploading both is safe). Delete the task afterwards:
+  schtasks /Delete /TN amlc_day2_chain /F
