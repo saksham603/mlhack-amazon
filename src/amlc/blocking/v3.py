@@ -88,15 +88,15 @@ def build_index(r23: pl.DataFrame, kinds: tuple = ALL_KINDS) -> tuple[pl.DataFra
     rare_whole = v2.idf_table(k23.filter(pl.col("kind").is_in(["rns", "rsk"])), n, CAP_WHOLE)
     rare_aa = v2.idf_table(k23.filter(pl.col("kind") == "aa"), n, CAP_AA)
     rare_cns = v2.idf_table(k23.filter(pl.col("kind") == "cns"), n, CAP_CNS)
-    rare = pl.concat([t for t in (rare_na, rare_whole, rare_aa, rare_cns) if t.height]).with_columns(pl.col("kind").cast(pl.String))
-    return k23.with_columns(pl.col("kind").cast(pl.String)), rare
+    rare = pl.concat([t for t in (rare_na, rare_whole, rare_aa, rare_cns) if t.height])  # kind stays Enum (1 byte, not a string per row)
+    return k23, rare
 
 
 def candidates(r1_batch: pl.DataFrame, k23: pl.DataFrame, rare: pl.DataFrame, k: int,
                max_rows: int = 150_000_000) -> pl.DataFrame:
     """(s1_gid, s23_gid, v3_score, v3_rank) top-k by IDF-weighted shared v3 keys (rounded, so ties are
     broken the same way on every run)."""
-    k1 = keys(r1_batch, NAME_KINDS).rename({"gid": "s1_gid"}).with_columns(pl.col("kind").cast(pl.String))
+    k1 = keys(r1_batch, NAME_KINDS).rename({"gid": "s1_gid"})
     scored = v2.score(k1, k23, rare, NAME_KINDS, max_rows).with_columns(pl.col("score").round(6))
     top = v2.topk(scored, k).join(scored, on=["s1_gid", "s23_gid"], how="left")
     return (top.sort(["s1_gid", "score", "s23_gid"], descending=[False, True, False])
@@ -108,7 +108,7 @@ def candidates_addr(r1_batch: pl.DataFrame, k23: pl.DataFrame, rare: pl.DataFram
                     max_rows: int = 150_000_000) -> pl.DataFrame:
     """v3.1: (s1_gid, s23_gid, va_score, va_rank) top-k by IDF of shared address-pair / exact-name keys,
     ranked separately so name-replaced or address-less matches are not pushed out by name matches."""
-    k1 = keys(r1_batch, ADDR_KINDS).rename({"gid": "s1_gid"}).with_columns(pl.col("kind").cast(pl.String))
+    k1 = keys(r1_batch, ADDR_KINDS).rename({"gid": "s1_gid"})
     scored = v2.score(k1, k23, rare, ADDR_KINDS, max_rows).with_columns(pl.col("score").round(6))
     top = v2.topk(scored, k).join(scored, on=["s1_gid", "s23_gid"], how="left")
     return (top.sort(["s1_gid", "score", "s23_gid"], descending=[False, True, False])

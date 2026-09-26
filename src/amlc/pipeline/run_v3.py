@@ -9,6 +9,7 @@ Run (PYTHONPATH=src):  python -m amlc.pipeline.run_v3 fit | val | train | test |
 """
 import glob
 import json
+import os
 import sys
 import time
 
@@ -24,13 +25,14 @@ from amlc.model.assemble_output import build_id_maps, group_ids, links_to_tsv, w
 from amlc.model.predict import predictions_at_threshold
 
 K1, K3 = 30, 20
+KA = int(os.environ.get("AMLC_KA", "0"))  # v3.1: address-key top-k (0 = v3.0 behaviour)
 V1 = access.DATA / "_v1"
-OUT = access.DATA / "_v3"
-MODEL_PATH = access.ROOT / "models" / "lgbm_v3.txt"
+OUT = access.DATA / ("_v31" if KA else "_v3")
+MODEL_PATH = access.ROOT / "models" / ("lgbm_v31.txt" if KA else "lgbm_v3.txt")
 TEST_SCORED = OUT / "test_feats_scored"
 OUTPUT = access.ROOT / "output"
 REC = access.DATA / "_v2" / "records"
-BLOCK_FEATURES = ["v1_score", "v1_rank", "v3_score", "v3_rank"]
+BLOCK_FEATURES = ["v1_score", "v1_rank", "v3_score", "v3_rank"] + (["va_score", "va_rank"] if KA else [])
 FEATURES = BLOCK_FEATURES + w3.NEW_FEATURES
 SEED = 20260927
 BATCH = 5000
@@ -58,10 +60,16 @@ def v1_top(files: list) -> pl.DataFrame:
                               pl.col("blocking_rank").cast(pl.UInt32).alias("v1_rank")).collect() for f in files])
 
 
-def union(v1c: pl.DataFrame, v3c: pl.DataFrame) -> pl.DataFrame:
+def union(v1c: pl.DataFrame, v3c: pl.DataFrame, vac: pl.DataFrame | None = None) -> pl.DataFrame:
     b = v3c.filter(pl.col("v3_rank") <= K3).select("s1_gid", "s23_gid", "v3_score", pl.col("v3_rank").cast(pl.UInt32))
-    return (v1c.join(b, on=["s1_gid", "s23_gid"], how="full", coalesce=True)
-            .with_columns(pl.col("v1_score", "v3_score").fill_null(0.0), pl.col("v1_rank", "v3_rank").fill_null(999)))
+    u = (v1c.join(b, on=["s1_gid", "s23_gid"], how="full", coalesce=True)
+         .with_columns(pl.col("v1_score", "v3_score").fill_null(0.0), pl.col("v1_rank", "v3_rank").fill_null(999)))
+    if vac is None:
+        return u
+    a = vac.filter(pl.col("va_rank") <= KA).select("s1_gid", "s23_gid", "va_score", pl.col("va_rank").cast(pl.UInt32))
+    return (u.join(a, on=["s1_gid", "s23_gid"], how="full", coalesce=True)
+            .with_columns(pl.col("v1_score", "v3_score", "va_score").fill_null(0.0),
+                          pl.col("v1_rank", "v3_rank", "va_rank").fill_null(999)))
 
 
 def build(dataset: str, country: str, s1_gids: pl.Series, v1c: pl.DataFrame, out_dir, labels=None, booster=None) -> dict:
@@ -69,7 +77,7 @@ def build(dataset: str, country: str, s1_gids: pl.Series, v1c: pl.DataFrame, out
     out_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     r1, r23 = records(dataset, country)
-    k23, rare = v3.build_index(r23.select("gid", "core", "addr", "region", "ns", "skel"))
+    k23, rare = v3.build_index(r23.select("gid", "core", "addr", "region", "ns", "skel"), v3.ALL_KINDS if KA else v3.NAME_KINDS)
     log(f"{dataset}/{country}: index {k23.height:,} keys ({time.time() - t0:.0f}s)")
     r1s = r1.join(pl.DataFrame({"gid": s1_gids}), on="gid", how="semi").sort("gid")
     n_rows = 0
@@ -78,9 +86,11 @@ def build(dataset: str, country: str, s1_gids: pl.Series, v1c: pl.DataFrame, out
         if dst.exists():
             continue
         rb = r1s.slice(i, BATCH)
-        c3 = v3.candidates(rb.select("gid", "core", "addr", "region", "ns", "skel"), k23, rare, K3)
+        rk = rb.select("gid", "core", "addr", "region", "ns", "skel")
+        c3 = v3.candidates(rk, k23, rare, K3)
+        ca = v3.candidates_addr(rk, k23, rare, KA) if KA else None
         c1 = v1c.join(rb.select(pl.col("gid").alias("s1_gid")), on="s1_gid", how="semi")
-        u = union(c1, c3)
+        u = union(c1, c3, ca)
         if u.height == 0:
             continue
         x = w3.pair_features(u, r1, r23)
@@ -122,6 +132,7 @@ def train() -> dict:
     for f in sorted(glob.glob(str(OUT / "fit" / "*.parquet"))):
         d = pl.read_parquet(f, columns=["s1_gid", "s23_gid", "label", *FEATURES])
         hard = ((pl.col("label") == 1) | (pl.col("v1_rank") <= 10) | (pl.col("v3_rank") <= 10)
+                | ((pl.col("va_rank") <= 5) if KA else pl.lit(False))
                 | (pl.col("n_tset") >= 70) | (pl.col("a_tset") >= 70))
         keep = (pl.struct("s1_gid", "s23_gid").hash(seed=SEED) % 1000) < int(EASY_KEEP * 1000)
         parts.append(d.filter(hard | keep).with_columns(pl.when(hard).then(1.0).otherwise(1.0 / EASY_KEEP).cast(pl.Float32).alias("w")))

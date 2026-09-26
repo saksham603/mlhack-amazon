@@ -655,3 +655,28 @@ User has requested AWS GPU quota (8 on free account, 48 on paid, Mumbai + N.Virg
 IST to decide whether to add a neural model, laptop plan proceeds regardless.
 Starting: error analysis (src/amlc/model/error_v3.py) + full TEST scoring on v3 candidates (~2h,
 src/amlc/pipeline/run_v3.py test). SELF-CHECK 04:08: ok
+
+## 04:45 - Session restart recovery (previous session ended while 2 jobs ran)
+Checked: no python process alive (no orphan). Test run v3.0 had written 13 France batches to
+data/_v3/test_feats_scored before stopping: all 13 readable, 5,000 S1 each, no duplicates, no null
+probabilities -> kept (resumable). data/_v3/test_scored (20 files from the earlier killed run, old
+format) is obsolete and unused by assemble; kept, not deleted. eval_v31 had produced nothing -> rerun.
+Code: key kinds made selectable in blocking/v3.py; regression check on VAL India batch 0: 95,964 /
+95,964 name candidates identical to the saved v3.0 ones (ranks equal, score diff 0). Committed 42783c2.
+Rule from now on: one heavy job at a time, each with an exit marker in its log.
+Error analysis (FIT holdout 60k S1, v3.0 model): 207,228 true links; 4.6% missed by candidates
+(21% of India misses / 45% of US misses have an empty S2/S3 address; many others have a replaced
+name but the same address -- DBA noise), 4.6% scored below threshold, 2,193 wrong links accepted.
+Running now: eval_v31 (address-pair + exact-name keys, separately ranked).
+
+## 05:05 - Second session crash diagnosed: MEMORY PRESSURE (jobs themselves finished)
+eval_v31 completed (exit 0, 04:54) -- it was the Claude session that died. Evidence: India index with
+name + address keys = 121.9M keys and took 679 s (name-only: 76 s) -> paging; with nothing running only
+~8.6 GB RAM is free on this laptop (other apps hold the rest). First crash: two heavy jobs at once.
+eval_v31 result (FIT v1 sample): adding address top-10 lifts recall India 0.936 -> 0.966 (44.7 -> 50.7
+per S1), US 0.971 -> 0.981 (43.6 -> 47.0). Adopted: AMLC_KA=10.
+Fixes: key kind kept as Enum (was cast to String: ~2 GB wasted at 122M rows); name and address indexes
+built separately, never together; FIT/VAL reuse stored v3.0 name candidates; free RAM logged per batch
+(src/amlc/pipeline/mem.py). Regression: name candidates 95,964/95,964 and address candidates
+97,739/97,739 identical to the stored ones; name index now 27 s, address index 145 s, free RAM >= 7.6 GB.
+New runner src/amlc/pipeline/run_v31.py -> data/_v31, models/lgbm_v31.txt (v3.0 artifacts untouched).
