@@ -384,3 +384,14 @@ While waiting: wrote and tested (2/2 + 2/2) the step 5 (run_test_country.py) and
 Commit: 6c351e9, fb53a7a, 351341a, 2db48f3, 3e2e578
 Next: wait for build_datasets US to finish; run it for India; then step 4 (train+tune+report).
 SELF-CHECK 18:50: ok
+
+## 18:56 Sprint step 3 complete for US
+Action: build_datasets US finished. Index build 18:32:17-18:51:07 (~18.8min), FIT 18:51:07-18:54:44
+(17 batches, 50,000 S1, 6,862,009 candidates, 161,829 positive labels, 2.36% positive rate),
+VALIDATION 18:54:44-18:56:11 (7 batches, 20,000 S1 [A+B combined], 2,744,413 candidates).
+Peak RAM 10,217.0 MB -- within the <=10.5GB (10,752MB) D-S2 target with ~535MB margin.
+Launched India (background b32ij6cov) immediately after.
+Commit: (data outputs only, not committed -- data/_v1/ is gitignored by design, matches existing
+data/ convention; only the small JSON summary was written to data/_dryrun_w1/build_datasets_US.json)
+Next: wait for India; then step 4 (train LightGBM on FIT India+US, tune on VAL-A, report on VAL-B).
+SELF-CHECK 18:56: ok
