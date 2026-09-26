@@ -494,3 +494,23 @@ that v1 is still worth submitting (only way to measure France/test, validates fo
 Next: US repair finishes (old code, single-file scoring) -> full per-batch verification ->
 model-miss analysis -> India (new batched code) -> step 6.
 SELF-CHECK 21:25: ok
+
+## 21:40 Second session restart; batched scoring caught a second mixed batch (00211)
+State after restart: no python process alive (checked -- no orphan this time), all 222 US
+candidate+feature batches on disk, scoring never finished. Added a fast path (dfc773a): if all
+batches exist, skip the pool load + index rebuild and go straight to batched scoring.
+The new join check in score_batches then STOPPED on batch 00211: 402,980 candidate rows and
+402,980 feature rows (equal counts, so the count check alone would have passed), but only 402,670
+pairs matched -- its candidate file came from one run and its feature file from another. Verified
+all 222 batches pairwise (candidates vs features on (s1_gid, s23_gid)): 00211 is the only bad one.
+Deleted it and re-ran US (index rebuild, regenerate 00211, score 211-221; 0-210 already scored and
+verified, skipped).
+Finding (reproducibility gap, for tomorrow): two runs of the same batch do NOT produce identical
+candidate sets (00211 differed by 310 pairs, 00212 by 1 row earlier, run totals by 5 rows in 88.8M).
+Likely cause: multithreaded float summation in v2.score's group_by(...).sum() -> last-bit score
+differences -> ties flip at the top-100/top-50 cut. Harmless for correctness now that every batch
+is regenerated as a matched pair, but blocking is not bit-reproducible run to run. Fix candidates:
+round scores before ranking, or sum in a fixed order.
+France was a single clean run with no orphan; its log shows 33,554,286 candidates = 33,554,286
+scored, so the old inner join dropped nothing there.
+SELF-CHECK 21:40: ok
