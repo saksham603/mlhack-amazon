@@ -1,0 +1,9 @@
+{
+  "country": "US",
+  "n_s1": 663106,
+  "n_candidates": 88832105,
+  "n_scored": 88832105,
+  "n_batches": 222,
+  "batch_size": 3000,
+  "peak_ram_mb": 9377.2
+}

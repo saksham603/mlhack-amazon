@@ -1,0 +1,86 @@
+{
+  "n_holdout_s1": 10016,
+  "n_holdout_true_links": 34550,
+  "n_holdout_in_candidate_true": 29815,
+  "base": {
+    "model": "base_9",
+    "n_features": 9,
+    "best_threshold": 0.64,
+    "holdout_f05_vs_all_true_links": 0.8244299656567292,
+    "holdout_f05_vs_in_candidate_links": 0.8759602864324056,
+    "by_country_vs_all_true_links": {
+      "India": 0.7731937470721296,
+      "US": 0.8745530133852542
+    },
+    "pair_precision": 0.9442212242968565,
+    "pair_recall_in_candidates": 0.803957739392923,
+    "feature_importance_gain": {
+      "name_jaccard": 20697139.5,
+      "name_overlap_n": 1897987.3,
+      "addr_token_jaccard": 9810707.1,
+      "house_number_match": 502973.9,
+      "zip_match": 4190.5,
+      "legal_form_match": 145513.4,
+      "legal_form_both_present": 117306.1,
+      "blocking_score": 5613231.6,
+      "blocking_rank": 13875495.0
+    }
+  },
+  "context": {
+    "model": "base_plus_context",
+    "n_features": 17,
+    "best_threshold": 0.66,
+    "holdout_f05_vs_all_true_links": 0.834637197077178,
+    "holdout_f05_vs_in_candidate_links": 0.8863030692247759,
+    "by_country_vs_all_true_links": {
+      "India": 0.7841512505781181,
+      "US": 0.8840262733185057
+    },
+    "pair_precision": 0.9393904978232065,
+    "pair_recall_in_candidates": 0.8322656381016267,
+    "feature_importance_gain": {
+      "name_jaccard": 2058662.3,
+      "name_overlap_n": 17000.8,
+      "addr_token_jaccard": 6949703.9,
+      "house_number_match": 413989.5,
+      "zip_match": 2494.0,
+      "legal_form_match": 125044.4,
+      "legal_form_both_present": 94217.1,
+      "blocking_score": 384005.6,
+      "blocking_rank": 1042333.2,
+      "n_cand_s1": 67763.7,
+      "score_rel_max": 108201.1,
+      "score_gap_top": 90774.5,
+      "name_jac_rank": 42472.9,
+      "name_jac_rel_max": 16092.3,
+      "n_exact_name_s1": 311545.8,
+      "addr_jac_rank": 646826.8,
+      "n_s1_sharing_s23": 117445.6
+    }
+  },
+  "context_model_false_negatives": {
+    "n": 5001,
+    "name_jaccard_median": 0.6666666666666666,
+    "name_jaccard_eq_1_share": 0.34933013397320534,
+    "addr_jaccard_median": 0.4166666666666667,
+    "house_match_share": 0.22915416916616677,
+    "blocking_rank_median": 6.0,
+    "by_country": {
+      "India": 2461,
+      "US": 2540
+    }
+  },
+  "context_model_false_positives": {
+    "n": 1601,
+    "name_jaccard_median": 0.75,
+    "name_jaccard_eq_1_share": 0.48469706433479076,
+    "addr_jaccard_median": 0.6363636363636364,
+    "house_match_share": 0.3391630231105559,
+    "blocking_rank_median": 4.0,
+    "by_country": {
+      "US": 677,
+      "India": 924
+    }
+  },
+  "peak_ram_mb": 5454.6
+}

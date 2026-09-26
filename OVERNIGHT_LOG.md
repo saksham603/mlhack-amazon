@@ -514,3 +514,19 @@ round scores before ranking, or sum in a fixed order.
 France was a single clean run with no orphan; its log shows 33,554,286 candidates = 33,554,286
 scored, so the old inner join dropped nothing there.
 SELF-CHECK 21:40: ok
+
+## 21:58 US TEST complete; model-miss analysis says the MODEL is the bigger lever
+US: 88,832,105 candidates = 88,832,105 scored, 222/222 batches pass the pair-level check, peak RAM
+9,377.2 MB. France + US complete. India launched 21:58 (new batched scoring).
+Model-miss analysis (FIT holdout s1_gid % 10 == 0, 10,016 S1, never trained on), peak RAM 5.45GB:
+- base 9 features: F0.5 vs all true links 0.8244 (VAL-B was 0.8259 -- holdout is a good proxy);
+  vs in-candidate true links only 0.8760. So of the gap to 1.0: ~5.2 pts blocking, ~12.4 pts model.
+  CORRECTION of my earlier claim to the user that blocking recall is the main bottleneck -- measured,
+  the model loses ~2.4x more. Told the user.
+- + 8 per-S1 context features: 0.8346 (+1.0; India 0.773->0.784, US 0.875->0.884), threshold 0.66.
+- Top feature by gain: addr_token_jaccard (6.9M, 3x the next). False negatives: 35% have
+  name_jaccard == 1 but median addr jaccard 0.42, house match 23% -- true matches with differing
+  addresses get rejected. False positives: 48% exact name, addr jaccard 0.64 (branches/look-alikes).
+Ranked model levers for tomorrow: richer address features (city/state/street/number tokens),
+IDF-weighted name similarity, more FIT training data (100k of ~1.5M S1 used), context features.
+SELF-CHECK 21:58: ok
