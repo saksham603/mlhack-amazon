@@ -18,7 +18,7 @@ def to_xy(df: pl.DataFrame, feature_cols: list[str] = FEATURE_COLS):
 
 def train_test_split(df: pl.DataFrame, holdout_frac: float = 0.1, seed: int = SEED):
     """Split by S1 (not by row), so no S1's candidates leak across train/holdout."""
-    s1_ids = df.select("s1_gid").unique()
+    s1_ids = df.select("s1_gid").unique().sort("s1_gid")  # sorted: unique() order is not stable
     n_holdout = max(1, round(s1_ids.height * holdout_frac))
     holdout_s1 = s1_ids.sample(n=n_holdout, seed=seed, shuffle=True, with_replacement=False)
     holdout = df.join(holdout_s1, on="s1_gid", how="semi")
