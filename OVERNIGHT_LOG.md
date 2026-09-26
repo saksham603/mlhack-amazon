@@ -158,3 +158,102 @@ isn't mistaken for one later).
 Gates: all PASS. Runtime ~53s, peak RAM ~2.5 GB (dominated by the dictionary build).
 Commit: none yet
 Next: T4 (decision checkpoint, §6 pre-decided rules already apply) -> T5 (commit) -> T6 (full run)
+
+## 07:15 T4/T5 complete
+Action: T4 decision checkpoint -- D-C3a applied (empty names left as-is; the few 1%-slice examples
+trace to real degenerate raw names like "The" and "MR", not a bug). T5: tree was clean of
+disallowed paths; full suite 135/135 passed once more; committed.
+Commit: 8c397ec
+Next: T6 full run (RAM estimate, then background execution, watching RAM between tables)
+
+## 07:20 T6 pre-run estimate (CG-19/CG-22, before starting)
+Free RAM now: 9.14 GB. Budget: min(12, 9.14-1.5) = 7.64 GB.
+RAM estimate: chunking (CHUNK_N=10) bounds memory to roughly one chunk + the fixed dictionary cost,
+independent of full table size (confirmed: the full 2.2M-row train S1 table peaked at 2467 MB via
+chunking, barely above the dictionary's own 2242.9 MB). Conservative estimate for the whole 6-table
+run: 2.5-5.6 GB (upper bound assumes the largest table's ~3.4 GB per-chunk cost stacks fully on top
+of the dictionary's ~2.2 GB rather than reusing freed memory). Both ends are under the 7.64 GB
+budget with margin.
+Runtime estimate: full train S1 (2,206,821 rows) took 161.2s in isolation. Total across all 6
+tables (~24.2M rows) at a comparable or slightly slower blended rate (S2/S3 are noisier): ESTIMATE
+20-30 minutes. Labelled as an estimate (CG-22); the runner prints per-table progress.
+Starting T6 now, in the background, watching for the runner's per-table RAM line and any crash.
+
+## 06:48 T6 COMPLETE: silver v1 published
+Action: Full run of all 6 tables, chunked (CHUNK_N=10 per table). ALL GATES PASSED.
+- Row counts: all 6 tables match C1 output exactly (train S1 2,206,821 / S2 5,034,616 / S3 5,285,603;
+  test S1 1,732,544 / S2 4,887,273 / S3 5,082,316).
+- Idempotence (G-SIL-13): 0 bad names, 0 bad addresses, on EVERY table, full data (not just the slice).
+- G-C2-coverage-train: 0.9775 (measured), >= 0.949 (§1 baseline) -- PASS, matches the earlier
+  standalone measurement exactly.
+- G-SIL-C5-pool: train IDF built from 3,205,354 train-pool rows, test IDF from 3,020,000 test-pool
+  rows (India only, since C5's own gate here is per-country IDF; full pool row counts are the full
+  22.2M rows across all countries -- these numbers are the India-only join count from the coverage
+  step's bookkeeping, not a separate gate value; noted for the morning report to double check this
+  label is accurate).
+- leakscan clean (G-SIL-L2).
+- Peak RAM: 4896.3 MB, well under the 7.64 GB budget (estimate was 2.5-5.6 GB -- within range).
+- Determinism (G-SIL-5): a fresh-process rerun gives byte-identical output for all 6 files.
+- Runtime: 4045.3s (~67.4 min) -- longer than the 20-30 min estimate because G-SIL-5's determinism
+  check reprocesses all 6 tables a SECOND time in a fresh subprocess (~2x the single-pass time,
+  consistent: ~33 min x 2 ~= 67 min). The estimate should have said this explicitly; noted as a gap
+  in the pre-run estimate, not a measurement bug.
+Published: data/silver/v1/ (6 table parquets + idf_train.parquet + idf_test.parquet), 
+data/dictionaries/v1/indic_translit.parquet, data/MANIFEST_silver_v1.json. All files read-only.
+Commit: 8c397ec (already committed before the run, per G-P5/CG-15)
+Time check: 06:48, well before the 09:15 time-rule cutoff.
+Next: T7 (W1 blocking dry run -- design and measurement only, reads published silver/v1)
+
+## 06:50 Correction to the 06:48 entry
+The G-SIL-C5-pool numbers (train_rows: 3,205,354, test_rows: 3,020,000) are NOT document/row counts.
+idf_tables[ds] is the output of stats.finalize_idf(): one row per (country, token) pair -- i.e. these
+are VOCABULARY SIZES (distinct token-country pairs), not pool sizes. Mislabeled in the code's own gate
+description ("train IDF built only from train tables") and in my 06:48 log entry. Not a data bug --
+the IDF values themselves are correct (verified separately: R5 additive-vs-whole-pool equivalence
+test passes) -- only the gate's reported number is mislabeled. Logging the correction rather than
+silently editing the earlier entry (log is append-only).
+
+## 07:00 T7 started
+Action: Wrote src/amlc/blocking/{candidates.py, dryrun_w1.py} + tests/blocking/test_candidates.py.
+9 new tests pass; full suite 144/144 pass under -W error::DeprecationWarning (caught and fixed
+another explode() empty_as_null deprecation, same CG-18 pattern as before). Smoke-tested on real
+data (US): 9,265 sampled FIT S1, 6,186,873 S2+S3 pool, 2,106,090 scored pairs at cap=500 in ~49s,
+top-30 gives 259,734 candidates. Starting the full T7 measurement (US + India, all 4 caps x 5 k
+values), ESTIMATE ~10-15 minutes (extrapolated from the smoke test's per-cap timing).
+
+## LESSON L13
+Time: 07:05
+Mistake: dryrun_w1.py has no pre-run RAM estimate, no budget check, and no abort-on-breach logic --
+unlike silver_run.py (T6), which has all three (G-P9/CG-19). The run completed successfully (peak
+10,092.7 MB), but that was not verified safe in advance; it happened to fit because more RAM was
+actually free at the time than my last check (9.14 GB free at 07:20, budget 7.64 GB) had shown.
+10.42 GB is free now, after the run finished and released memory, consistent with more headroom
+having existed during the run than I had last measured -- but I did not re-check free RAM
+immediately before T7 started, and the code has no self-check during the run either.
+How caught: reviewing the run's own peak_ram_mb output against my last logged budget, after the
+fact -- not caught by a runtime check, because there wasn't one.
+Rule added: none new (G-P9/CG-19 already require this everywhere, not just T6). Flagging this as a
+process gap in dryrun_w1.py to fix before any daytime W1 work (S8) reuses this code, and as a
+reminder that "it happened to work" is not the same as "it was checked safe" (the distinction the
+guardrail exists to enforce).
+
+## 07:08 T7 COMPLETE: critical finding -- blocking recall is well below the workflow plan's targets
+Measured on 1% of FIT S1 per country vs. the FULL S2/S3 pool (real data, silver v1):
+- US: recall tops out at 0.8198 (cap=5000, k=100). Target (workflow plan W1 exit gate): >= 0.97.
+- India: recall tops out at 0.4976 (cap=5000, k=100). Target: >= 0.95. Recall is roughly HALF the
+  target across every cap/k combination tried, and barely above 0.27 at the smallest cap/k.
+- Recall rises with both cap and k in both countries, but is nowhere near flattening in the range
+  tried (100-5000 cap, k=10-100) -- more so for India, where the curve is still rising steeply at
+  cap=5000. Widening the grid further was NOT done (T7 scope: measurement only, no cap/k choice).
+- Pair counts (before any cap on k): US 538,765 (cap=100) to 18,464,413 (cap=5000); India 212,018
+  to 5,444,451. Scoring runtime 13-42s per (country, cap) on the 1% S1 sample against the full pool.
+- This is consistent with the workflow plan's own known risk (M8): "24% of India true pairs share
+  no name token at all" -- India's shortfall is much larger than US's, and the current 3 key types
+  (rare core-name tokens; house-number+address-token composite; ZIP/PIN) cannot recover matches with
+  no shared name token and no matching address key. The char-3gram pass (scikit-learn, not installed
+  tonight) is explicitly the fallback the workflow plan names for exactly this gap.
+Not done (needs the user, explicitly out of scope for tonight): choosing a cap or k, extending the
+grid, adding the char-3gram pass, or any other change aimed at raising recall. This is reported as
+a measurement, not treated as a problem to silently fix.
+Report: data/_dryrun_w1/w1_dryrun_report.json (full per-country, per-cap, per-k breakdown).
+Runtime: 234.9s total, peak RAM 10,092.7 MB (see L13 above).
