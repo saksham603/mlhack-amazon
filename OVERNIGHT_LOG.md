@@ -405,3 +405,22 @@ data/_v1/validation/, gitignored data dir, small JSON summaries only in data/_dr
 Step 3 done. Moving to step 4 (train LightGBM on combined India+US FIT, tune threshold on
 VALIDATION half A, report F0.5 on half B) now, no pause.
 SELF-CHECK 19:13: ok
+
+## 19:21 Sprint step 4 complete: VAL-B F0.5 0.826, no leak
+Action: LightGBM trained on 12,049,894 FIT rows (India+US combined, 299,524 positive, 2.49% rate),
+S1-disjoint 10% holdout, early stopping. Threshold swept 0.02-0.98 on VALIDATION half A (49 points),
+best=0.64 (val_a_f05=0.828). Reported on half B (20,000 S1, untouched by tuning): overall F0.5
+0.8259, India 0.7767, US 0.8757. pair_precision 0.945, pair_recall 0.694. Runtime 410.1s.
+leakscan run on src/ BEFORE trusting this number (sprint 7.3): 0 hits. No STOP triggered:
+0.8259 is not < 0.60, and both per-country numbers (0.7767 India, 0.8757 US) are below their
+respective oracle ceilings (0.910, 0.978) -- not an impossible result.
+Gap analysis (for the final report's ranked list): India model gap = 0.910-0.7767 = 0.133;
+US model gap = 0.978-0.8757 = 0.102. Both non-trivial -- pair_recall=0.694 means the model itself
+is dropping ~31% of in-candidate true pairs below threshold, not just a blocking-recall problem;
+the 9 simple features (no fuzzy/embedding signal) are a real second-place lever for tomorrow,
+alongside the char-3gram blocking-recall fix already identified.
+Saved: models/lgbm_v1.txt (LightGBM text format, MIT-licensed library), data/_dryrun_w1/
+step4_model_report.json (full threshold curve + by_country/by_bucket breakdown).
+Commit: (follows this entry)
+Next: step 5, full TEST run (India, US, France), one country per process, resumable.
+SELF-CHECK 19:21: ok
