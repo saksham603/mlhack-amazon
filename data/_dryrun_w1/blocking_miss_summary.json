@@ -1,0 +1,40 @@
+{
+  "India": {
+    "country": "India",
+    "n_s1": 50000,
+    "n_true_links": 173212,
+    "n_missed": 35517,
+    "fit_sample_recall": 0.7949506962566104,
+    "missed_by_category": {
+      "shares_name_token": 29389,
+      "no_name_no_house_signal": 3283,
+      "no_token_but_char3_similar": 2799,
+      "no_name_sim_same_house_no": 46
+    },
+    "missed_share_of_all_true_links": {
+      "shares_name_token": 0.16967069256171627,
+      "no_name_no_house_signal": 0.01895365217190495,
+      "no_token_but_char3_similar": 0.01615938849502344,
+      "no_name_sim_same_house_no": 0.00026557051474493685
+    }
+  },
+  "US": {
+    "country": "US",
+    "n_s1": 50000,
+    "n_true_links": 172395,
+    "n_missed": 10566,
+    "fit_sample_recall": 0.9387105194466197,
+    "missed_by_category": {
+      "shares_name_token": 8158,
+      "no_token_but_char3_similar": 1380,
+      "no_name_no_house_signal": 1024,
+      "no_name_sim_same_house_no": 4
+    },
+    "missed_share_of_all_true_links": {
+      "shares_name_token": 0.047321558049827434,
+      "no_token_but_char3_similar": 0.00800487253110589,
+      "no_name_no_house_signal": 0.005939847443371327,
+      "no_name_sim_same_house_no": 2.3202529075669247e-05
+    }
+  }
+}
