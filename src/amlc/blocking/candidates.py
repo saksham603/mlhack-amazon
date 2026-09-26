@@ -122,8 +122,11 @@ def candidates_for_cap(s1: pl.DataFrame, s23: pl.DataFrame, cap: int, ram_budget
 
 
 def candidates_topk(scored: pl.DataFrame, k: int) -> pl.DataFrame:
-    """Top-k S2/S3 candidates per S1, by score, ranked (never truncated in file order, M10)."""
-    return (scored.sort(["s1_gid", "score"], descending=[False, True])
+    """Top-k S2/S3 candidates per S1, by score, ranked (never truncated in file order, M10).
+    Ties are broken by s23_gid purely for reproducibility (2026-09-26: without it, equal scores at
+    the k boundary were ordered arbitrarily and two runs of the same sample gave different recall).
+    """
+    return (scored.sort(["s1_gid", "score", "s23_gid"], descending=[False, True, False])
             .group_by("s1_gid", maintain_order=True).head(k))
 
 
