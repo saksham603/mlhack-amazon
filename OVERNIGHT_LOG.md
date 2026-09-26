@@ -546,3 +546,16 @@ not just row counts) across all 270 batches, same lesson as the two US corruptio
 
 Step 5 (full TEST run: India, US, France) is now complete and verified for all three countries.
 Moving to step 6: assemble output/candidate_pairs.tsv + output/matching_results.tsv.
+
+## 22:52 - Step 6: outputs written; local validator hit MemoryError -> §7.1 STOP
+
+`assemble_output.py` succeeded (threshold 0.64 from VAL-A):
+- n_test_s1 1,732,544; candidate pairs 206,705,624; S1 with candidates 1,732,499, without 45
+- predictions (after G-M3) 4,623,926 across 1,577,624 S1; match rows written 1,732,544
+- output/candidate_pairs.tsv 2.69 GB, output/matching_results.tsv 82 MB (1,732,545 lines incl. header)
+
+`validate_output.py` then crashed: `memory allocation of 3307289984 bytes failed` (Polars/Rust),
+while reading the 2.69 GB candidate_pairs.tsv whole. This is an unexpected MemoryError, a §7.1
+STOP. No process left running, free RAM back to ~8970 MB. Outputs NOT yet validated, official
+validator NOT yet run. Stopped for user decision; proposed fix: stream-validate candidate_pairs.tsv
+line by line (stdlib, bounded RAM) instead of loading it as one frame.
