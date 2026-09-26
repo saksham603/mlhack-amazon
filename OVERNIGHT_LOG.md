@@ -395,3 +395,13 @@ Commit: (data outputs only, not committed -- data/_v1/ is gitignored by design, 
 data/ convention; only the small JSON summary was written to data/_dryrun_w1/build_datasets_US.json)
 Next: wait for India; then step 4 (train LightGBM on FIT India+US, tune on VAL-A, report on VAL-B).
 SELF-CHECK 18:56: ok
+
+## 19:13 Sprint step 3 complete for both countries
+Action: build_datasets India finished. Index 18:56:18-19:09:46 (~13.5min, smaller pool than US as
+expected), FIT 19:09:46-19:12:05 (17 batches, 50,000 S1, 5,187,885 candidates, 137,695 positive,
+2.65% positive rate), VALIDATION ~19:12:11-19:13ish (7 batches, 20,000 S1). Peak RAM 8,600.2 MB.
+US + India FIT/VALIDATION candidates+features+labels now both on disk (data/_v1/training/,
+data/_v1/validation/, gitignored data dir, small JSON summaries only in data/_dryrun_w1/).
+Step 3 done. Moving to step 4 (train LightGBM on combined India+US FIT, tune threshold on
+VALIDATION half A, report F0.5 on half B) now, no pause.
+SELF-CHECK 19:13: ok
