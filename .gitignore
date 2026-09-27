@@ -7,3 +7,5 @@ __pycache__/
 kaggle.json
 credentials.json
 *.duckdb
+models/*.txt
+output/

@@ -45,7 +45,8 @@ def main() -> dict:
     f05_base = _f05(base_pred, truth, s1_df["s1_gid"])
     log(f"f05_base (v3.1 model, existing candidates only): {f05_base:.5f}")
 
-    embed_cand = pl.read_parquet(CANDIDATES).select("s1_gid", "s23_gid").unique()
+    embed_cand = pl.read_parquet(CANDIDATES).select(
+        pl.col("s1_gid").cast(pl.UInt32), pl.col("s23_gid").cast(pl.UInt32)).unique()
     embed_cand = embed_cand.join(s1_df.select("s1_gid"), on="s1_gid", how="semi")  # holdout S1s only
     new_cand = new_pairs_only(embed_cand, d.select("s1_gid", "s23_gid"))
     log(f"embedding candidates (holdout S1s): {embed_cand.height:,}, new (not already candidates): {new_cand.height:,}")
