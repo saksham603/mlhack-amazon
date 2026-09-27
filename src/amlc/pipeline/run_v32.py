@@ -1,12 +1,19 @@
-"""Pipeline v3.2 (2026-09-27 08:05): the v3.1 candidates and features plus the number-noise features
-(amlc.features.numnoise), model retrained. Why: FIT-holdout error analysis (data/_v31/exp) showed the
+"""Pipeline v3.2 (2026-09-27 08:05, extended 09:20): the v3.1 candidates and features plus (a) the
+number-noise features (amlc.features.numnoise) and (b) the second machine's pseudo-word (generated-
+looking name) score, model retrained. Why: FIT-holdout error analysis (data/_v31/exp) showed the
 largest group of missed links is same name + same address with a perturbed number; the A/B there gave
-+0.0144 for a fresh model with these features. Pass-2 (+0.0009 in the same A/B) was skipped for this.
++0.0144 for a fresh model with the number-noise features. Pass-2 (+0.0009 in the same A/B) was skipped.
+
+The second machine (Ryzen) independently delivered gid -> pseudo_lm/pseudo_oov/pseudo_rare/pseudo_score
+for every train+test S2/S3 record (data/_v2/pseudo/, copied from the shared folder, SHA256-verified
+against its NOTE.md). A/B on the same FIT holdout, joined on top of numnoise: +0.00126 F0.5
+(0.96707 -> 0.96833; India +0.0025, US flat) -- a real, independent gain, so it's wired in here as a
+join rather than a recompute (the Ryzen already did the (label-free) language-model fitting).
 
 Steps (resumable: finished files are skipped; every file written atomically):
   x fit|val|test  number-noise features for every candidate pair of data/_v31/{fit,val,test_feats_scored}
-                  -> data/_v32/x_<sub>/<same file name>
-  train           LightGBM on FIT (v3.1 features + X), low-memory; threshold on VAL-A, report VAL-B
+                  -> data/_v32/x_<sub>/<same file name>  (pseudo features are a lookup join, not a step)
+  train           LightGBM on FIT (v3.1 features + X + pseudo), low-memory; threshold on VAL-A, report VAL-B
   test            TEST probabilities -> data/_v32/test_scored/<file> (s1_gid, s23_gid, prob)
   assemble <name> output/<name>/ (candidates = exactly the v3.1 candidate set)
 Run: PYTHONPATH=src AMLC_KA=10 python -m amlc.pipeline.run_v32 <step> [arg]   (AMLC_LOWPRI=1: below-normal priority)
@@ -34,10 +41,21 @@ if not R.KA:
     raise SystemExit("run_v32 builds on the v3.1 files: set AMLC_KA=10")
 OUT = access.DATA / "_v32"
 MODEL_PATH = R.MODEL_PATH.with_name("lgbm_v32.txt")
-FEATS = R.FEATURES + X_FEATURES
+PSEUDO_FEATURES = ["pseudo_lm", "pseudo_oov", "pseudo_rare", "pseudo_score"]
+PSEUDO_PATH = {"train": access.DATA / "_v2" / "pseudo" / "pseudo_train_s23.parquet",
+              "test": access.DATA / "_v2" / "pseudo" / "pseudo_test_s23.parquet"}
+FEATS = R.FEATURES + X_FEATURES + PSEUDO_FEATURES
 KEYS = ["s1_gid", "s23_gid"]
 SRC = {"fit": R.OUT / "fit", "val": R.OUT / "val", "test": R.TEST_SCORED}
 DATASET = {"fit": "train", "val": "train", "test": "test"}
+_PSEUDO_CACHE: dict = {}
+
+
+def _pseudo(dataset: str) -> pl.DataFrame:
+    if dataset not in _PSEUDO_CACHE:
+        _PSEUDO_CACHE[dataset] = pl.read_parquet(PSEUDO_PATH[dataset], columns=["gid", *PSEUDO_FEATURES]) \
+            .rename({"gid": "s23_gid"})
+    return _PSEUDO_CACHE[dataset]
 
 
 def log(msg):
@@ -71,17 +89,27 @@ def xfeats(sub: str) -> None:
 
 
 def _with_x(f, sub: str, cols: list) -> pl.DataFrame:
-    """Columns `cols` of v3.1 file f joined 1:1 with its number-noise features (row order of f kept)."""
-    base = [c for c in dict.fromkeys(KEYS + cols) if c not in X_FEATURES]
+    """Columns `cols` of v3.1 file f joined 1:1 with its number-noise features (from data/_v32/x_<sub>/,
+    a precomputed per-pair step) and its pseudo-word features (a lookup join on s23_gid against the
+    Ryzen's delivered gid-keyed table -- no precompute step needed). Row order of f kept."""
+    extra = X_FEATURES + PSEUDO_FEATURES
+    base = [c for c in dict.fromkeys(KEYS + cols) if c not in extra]
     d = pl.read_parquet(f, columns=base)
+    orig_height = d.height
     xc = [c for c in cols if c in X_FEATURES]
-    if not xc:
-        return d
-    x = pl.read_parquet(OUT / f"x_{sub}" / f.name, columns=KEYS + xc)
-    out = d.join(x, on=KEYS, how="left", validate="1:1", maintain_order="left")
-    if out.height != d.height or out.select(xc).null_count().sum_horizontal().item():
-        raise AssertionError(f"{f.name}: x join lost rows or left nulls. STOP.")
-    return out
+    if xc:
+        x = pl.read_parquet(OUT / f"x_{sub}" / f.name, columns=KEYS + xc)
+        d = d.join(x, on=KEYS, how="left", validate="1:1", maintain_order="left")
+        if d.height != orig_height or d.select(xc).null_count().sum_horizontal().item():
+            raise AssertionError(f"{f.name}: x join lost rows or left nulls. STOP.")
+    pc = [c for c in cols if c in PSEUDO_FEATURES]
+    if pc:
+        p = _pseudo(DATASET[sub]).select("s23_gid", *pc)
+        d = d.join(p, on="s23_gid", how="left", validate="m:1", maintain_order="left")
+        if d.height != orig_height:
+            raise AssertionError(f"{f.name}: pseudo join changed row count {orig_height} -> {d.height}. STOP.")
+        d = d.with_columns(pl.col(c).fill_null(0) for c in pc)  # s23_gid absent from the pseudo table -> no signal
+    return d
 
 
 def to_x(d: pl.DataFrame):
