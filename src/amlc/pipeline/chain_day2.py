@@ -115,8 +115,9 @@ def other_pipeline_pids() -> list:
         return []
     rows = json.loads(out)
     rows = rows if isinstance(rows, list) else [rows]
-    return [r["ProcessId"] for r in rows
-            if "amlc." in (r.get("CommandLine") or "") and "chain_day2" not in (r.get("CommandLine") or "")]
+    return [r["ProcessId"] for r in rows  # chain drivers are not jobs (chain_v32 waits for this chain, never the reverse)
+            if "amlc." in (r.get("CommandLine") or "") and "chain_day2" not in (r.get("CommandLine") or "")
+            and "chain_v32" not in (r.get("CommandLine") or "")]
 
 
 def wait_for_idle() -> None:

@@ -701,3 +701,23 @@ IF CLAUDE IS NOT RESPONDING: read data/_v31/chain/status.json. Upload output/v31
 once validate_base is ok, and output/v31_pass2/matching_results.tsv once validate_p2 is ok (only the best
 public score counts, so uploading both is safe). Delete the task afterwards:
   schtasks /Delete /TN amlc_day2_chain /F
+
+## 06:12 - v3.1 model trained: VAL-B F0.5 0.9646 (v3.0 was 0.9592)
+India 0.9577, US 0.9717, thr 0.68, P 0.9868, R 0.9277, empty 5.95%, 48.8 cand/S1, 2362 rounds (38 min).
+Buckets: 0 -> 0.953, 1-2 -> 0.944 (weakest), 3-4 -> 0.970, 5+ -> 0.976. Chain proceeds to v31_test.
+
+## 08:42 - Empty-address exact-name gap measured, not worth pursuing right now
+
+Checked the "same name, S2/S3 address empty" miss bucket (972/2729 not-in-candidates misses on the
+FIT holdout). A blocking key that indexes S2/S3 records with `addr == ""` by exact no-space name
+(small sub-pool: 265K test / 345K train per country, so a much looser IDF cap than the existing
+`cns` key which is capped against the whole multi-million-row pool) would add ~1.89M test candidate
+pairs (+3.7% of the current 50.7M) and recover 726 of the FIT-holdout's missed links as candidates.
+
+But scored with the existing v3.1 model (no block-rank feature for this new key, block features set
+to "not found by any key" -- the honest scenario), only 24.1% of those 726 cross the 0.66 threshold.
+Net: ~175 recovered matches out of 7,272 total missed links on the 29,792-S1 sample (~2.4%), likely
+worth <0.001-0.002 F0.5 for the full candidate-generation + feature + rescoring engineering cost
+(new blocking kind, third candidate-generation pass over the full test set, new features file).
+Not queued; v3.2 (+0.007, already running) and the Ryzen's France/pseudo-name work have far better
+ROI for the time left. Revisit only if those land early and time remains.
